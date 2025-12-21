@@ -11,7 +11,7 @@ from PyQt5.QtGui import (
     QPixmap, QImage, QPainter, QPen, QColor, QBrush, QCursor,
     QMouseEvent, QPaintEvent, QKeyEvent, QIcon
 )
-from PyQt5.QtCore import Qt, QPoint, QRect, QThread, pyqtSignal, QObject
+from PyQt5.QtCore import Qt, QPoint, QRect, QThread, pyqtSignal, QObject, QSize
 
 
 class SpriteDetector(QObject):
@@ -147,8 +147,20 @@ class SpriteDetector(QObject):
 class SpriteCanvas(QLabel):
     """精灵图画布，用于显示和编辑精灵区域"""
     
+    # 调整大小的方向常量
+    NONE = 0
+    LEFT = 1
+    RIGHT = 2
+    TOP = 4
+    BOTTOM = 8
+    TOP_LEFT = 5
+    TOP_RIGHT = 6
+    BOTTOM_LEFT = 9
+    BOTTOM_RIGHT = 10
+    
     rect_selected = pyqtSignal(int)
     rect_updated = pyqtSignal()
+    scale_changed = pyqtSignal(float)  # 缩放变化信号
     
     def __init__(self):
         super().__init__()
@@ -168,6 +180,13 @@ class SpriteCanvas(QLabel):
         self.start_pos = QPoint()
         self.current_rect = QRect()
         self.drawing_mode = False  # 是否处于绘制模式
+        
+        # 调整大小相关变量
+        self.is_resizing = False
+        self.resize_direction = self.NONE
+        self.resize_start_pos = QPoint()
+        self.original_rect = QRect()
+        self.handle_size = 8  # 调整大小的控制点大小
     
     def set_scale(self, scale):
         """设置缩放比例"""
@@ -209,7 +228,7 @@ class SpriteCanvas(QLabel):
         self.update()
     
     def paintEvent(self, event):
-        """绘制事件，用于绘制精灵区域框和正在创建的选框"""
+        """绘制事件，用于绘制精灵区域框、控制点和正在创建的选框"""
         super().paintEvent(event)
         if not self.original_pixmap:
             return
@@ -246,6 +265,10 @@ class SpriteCanvas(QLabel):
             
             # 绘制矩形索引
             painter.drawText(scaled_x + 5, scaled_y + 15, str(i+1))
+            
+            # 如果是选中的选框，绘制调整大小的控制点
+            if i == self.selected_rect_index:
+                self.draw_handles(painter, rect)
         
         # 绘制正在创建的选框
         if self.is_drawing:
@@ -256,16 +279,27 @@ class SpriteCanvas(QLabel):
             painter.drawRect(self.current_rect)
     
     def mouseMoveEvent(self, event):
-        """鼠标移动事件，用于检测鼠标悬停的边框或绘制选框"""
+        """鼠标移动事件，用于检测鼠标悬停的边框、绘制选框或调整选框大小"""
         mouse_pos = event.pos()
         
-        if self.drawing_mode and self.is_drawing:
+        if self.is_resizing:
+            # 调整选框大小
+            self.resize_rect(mouse_pos)
+        elif self.drawing_mode and self.is_drawing:
             # 绘制模式下，更新正在创建的选框
             self.current_rect = QRect(self.start_pos, mouse_pos).normalized()
             self.update()
         elif not self.drawing_mode:
-            # 非绘制模式下，检测鼠标悬停的边框
-            # 检查鼠标是否在某个精灵区域内
+            # 非绘制模式下
+            if self.selected_rect_index != -1:
+                # 如果有选中的选框，检测是否在调整大小的控制点上
+                direction = self.get_resize_direction(mouse_pos, self.sprite_rects[self.selected_rect_index])
+                if direction != self.NONE:
+                    self.resize_direction = direction
+                    self.set_cursor_by_direction(direction)
+                    return
+            
+            # 检测鼠标是否在某个精灵区域内
             hover_index = -1
             for i, rect in enumerate(self.sprite_rects):
                 x, y, width, height = rect
@@ -288,9 +322,10 @@ class SpriteCanvas(QLabel):
                 else:
                     self.setCursor(Qt.ArrowCursor)
                 self.update()
+            self.resize_direction = self.NONE
     
     def mousePressEvent(self, event):
-        """鼠标点击事件，用于选中边框或开始绘制选框"""
+        """鼠标点击事件，用于选中边框、开始绘制选框或开始调整选框大小"""
         if event.button() == Qt.LeftButton:
             if self.drawing_mode:
                 # 绘制模式下，开始创建选框
@@ -299,6 +334,22 @@ class SpriteCanvas(QLabel):
                 self.current_rect = QRect(self.start_pos, self.start_pos)
                 self.update()
             else:
+                if self.selected_rect_index != -1:
+                    # 如果有选中的选框，检查是否在调整大小的控制点上
+                    direction = self.get_resize_direction(event.pos(), self.sprite_rects[self.selected_rect_index])
+                    if direction != self.NONE:
+                        # 开始调整大小
+                        self.is_resizing = True
+                        self.resize_direction = direction
+                        self.resize_start_pos = event.pos()
+                        self.original_rect = QRect(
+                            int(self.sprite_rects[self.selected_rect_index][0] * self.scale_factor),
+                            int(self.sprite_rects[self.selected_rect_index][1] * self.scale_factor),
+                            int(self.sprite_rects[self.selected_rect_index][2] * self.scale_factor),
+                            int(self.sprite_rects[self.selected_rect_index][3] * self.scale_factor)
+                        )
+                        return
+                
                 # 非绘制模式下，选中边框
                 # 使用当前的hover_rect_index作为选中的区域
                 self.selected_rect_index = self.hover_rect_index
@@ -306,27 +357,86 @@ class SpriteCanvas(QLabel):
                 self.update()
     
     def mouseReleaseEvent(self, event):
-        """鼠标释放事件，用于完成选框绘制"""
-        if event.button() == Qt.LeftButton and self.drawing_mode and self.is_drawing:
-            self.is_drawing = False
-            # 计算选框的实际坐标（考虑缩放因子）
-            if not self.current_rect.isNull() and self.current_rect.width() > 5 and self.current_rect.height() > 5:
-                # 获取选框的左上角和右下角坐标
-                top_left = self.current_rect.topLeft()
-                bottom_right = self.current_rect.bottomRight()
+        """鼠标释放事件，用于完成选框绘制或调整大小"""
+        if event.button() == Qt.LeftButton:
+            if self.is_resizing:
+                # 完成调整大小
+                self.is_resizing = False
+                self.resize_direction = self.NONE
+                self.setCursor(Qt.ArrowCursor)
+                self.rect_updated.emit()
+            elif self.drawing_mode and self.is_drawing:
+                self.is_drawing = False
+                # 计算选框的实际坐标（考虑缩放因子）
+                if not self.current_rect.isNull() and self.current_rect.width() > 5 and self.current_rect.height() > 5:
+                    # 获取选框的左上角和右下角坐标
+                    top_left = self.current_rect.topLeft()
+                    bottom_right = self.current_rect.bottomRight()
+                    
+                    # 转换为原始图片坐标
+                    orig_x = int(top_left.x() / self.scale_factor)
+                    orig_y = int(top_left.y() / self.scale_factor)
+                    orig_width = int(self.current_rect.width() / self.scale_factor)
+                    orig_height = int(self.current_rect.height() / self.scale_factor)
+                    
+                    # 添加新的选框
+                    self.add_rect((orig_x, orig_y, orig_width, orig_height))
                 
-                # 转换为原始图片坐标
-                orig_x = int(top_left.x() / self.scale_factor)
-                orig_y = int(top_left.y() / self.scale_factor)
-                orig_width = int(self.current_rect.width() / self.scale_factor)
-                orig_height = int(self.current_rect.height() / self.scale_factor)
-                
-                # 添加新的选框
-                self.add_rect((orig_x, orig_y, orig_width, orig_height))
-            
-            # 重置当前绘制的选框
-            self.current_rect = QRect()
-            self.update()
+                # 重置当前绘制的选框
+                self.current_rect = QRect()
+                self.update()
+    
+    
+    
+    def resize_rect(self, pos):
+        """调整选框大小"""
+        if self.selected_rect_index == -1 or not self.is_resizing:
+            return
+        
+        # 计算新的矩形
+        new_rect = QRect(self.original_rect)
+        
+        if self.resize_direction & self.LEFT:
+            new_rect.setLeft(pos.x())
+        elif self.resize_direction & self.RIGHT:
+            new_rect.setRight(pos.x())
+        
+        if self.resize_direction & self.TOP:
+            new_rect.setTop(pos.y())
+        elif self.resize_direction & self.BOTTOM:
+            new_rect.setBottom(pos.y())
+        
+        # 确保矩形有效
+        new_rect = new_rect.normalized()
+        
+        # 确保最小尺寸
+        min_size = 10  # 最小尺寸（缩放后）
+        if new_rect.width() < min_size:
+            if self.resize_direction & self.LEFT:
+                new_rect.setLeft(new_rect.right() - min_size)
+            else:
+                new_rect.setRight(new_rect.left() + min_size)
+        
+        if new_rect.height() < min_size:
+            if self.resize_direction & self.TOP:
+                new_rect.setTop(new_rect.bottom() - min_size)
+            else:
+                new_rect.setBottom(new_rect.top() + min_size)
+        
+        # 转换为原始坐标
+        orig_x = int(new_rect.x() / self.scale_factor)
+        orig_y = int(new_rect.y() / self.scale_factor)
+        orig_width = int(new_rect.width() / self.scale_factor)
+        orig_height = int(new_rect.height() / self.scale_factor)
+        
+        # 确保选框不会移出图片边界
+        if self.original_pixmap:
+            orig_width = max(1, orig_width)
+            orig_height = max(1, orig_height)
+        
+        # 更新选框
+        self.sprite_rects[self.selected_rect_index] = (orig_x, orig_y, orig_width, orig_height)
+        self.update()
     
     def remove_selected_rect(self):
         """删除选中的边框"""
@@ -343,9 +453,127 @@ class SpriteCanvas(QLabel):
         self.rect_updated.emit()
         self.update()
     
+    def get_resize_direction(self, pos, rect):
+        """检测鼠标是否在选框的调整大小控制点上"""
+        # 将原始坐标转换为缩放后的坐标
+        x, y, width, height = rect
+        scaled_x = int(x * self.scale_factor)
+        scaled_y = int(y * self.scale_factor)
+        scaled_width = int(width * self.scale_factor)
+        scaled_height = int(height * self.scale_factor)
+        
+        draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
+        
+        # 计算各边的热区
+        margin = self.handle_size
+        left_margin = QRect(scaled_x - margin, scaled_y, margin * 2, scaled_height)
+        right_margin = QRect(scaled_x + scaled_width - margin, scaled_y, margin * 2, scaled_height)
+        top_margin = QRect(scaled_x, scaled_y - margin, scaled_width, margin * 2)
+        bottom_margin = QRect(scaled_x, scaled_y + scaled_height - margin, scaled_width, margin * 2)
+        
+        direction = self.NONE
+        
+        if left_margin.contains(pos):
+            direction |= self.LEFT
+        elif right_margin.contains(pos):
+            direction |= self.RIGHT
+        
+        if top_margin.contains(pos):
+            direction |= self.TOP
+        elif bottom_margin.contains(pos):
+            direction |= self.BOTTOM
+        
+        return direction
+    
+    def set_cursor_by_direction(self, direction):
+        """根据调整方向设置鼠标指针"""
+        if direction == self.NONE:
+            self.setCursor(Qt.ArrowCursor)
+        elif direction == self.LEFT or direction == self.RIGHT:
+            self.setCursor(Qt.SizeHorCursor)
+        elif direction == self.TOP or direction == self.BOTTOM:
+            self.setCursor(Qt.SizeVerCursor)
+        elif direction in (self.TOP_LEFT, self.BOTTOM_RIGHT):
+            self.setCursor(Qt.SizeFDiagCursor)
+        elif direction in (self.TOP_RIGHT, self.BOTTOM_LEFT):
+            self.setCursor(Qt.SizeBDiagCursor)
+    
+    def draw_handles(self, painter, rect):
+        """绘制调整大小的控制点"""
+        x, y, width, height = rect
+        scaled_x = int(x * self.scale_factor)
+        scaled_y = int(y * self.scale_factor)
+        scaled_width = int(width * self.scale_factor)
+        scaled_height = int(height * self.scale_factor)
+        
+        # 控制点的位置
+        handle_positions = [
+            QPoint(scaled_x, scaled_y),  # 左上角
+            QPoint(scaled_x + scaled_width // 2, scaled_y),  # 上中
+            QPoint(scaled_x + scaled_width, scaled_y),  # 右上角
+            QPoint(scaled_x, scaled_y + scaled_height // 2),  # 左中
+            QPoint(scaled_x + scaled_width, scaled_y + scaled_height // 2),  # 右中
+            QPoint(scaled_x, scaled_y + scaled_height),  # 左下角
+            QPoint(scaled_x + scaled_width // 2, scaled_y + scaled_height),  # 下中
+            QPoint(scaled_x + scaled_width, scaled_y + scaled_height)  # 右下角
+        ]
+        
+        # 绘制控制点
+        for pos in handle_positions:
+            # 绘制填充矩形
+            painter.fillRect(
+                pos.x() - self.handle_size // 2,
+                pos.y() - self.handle_size // 2,
+                self.handle_size,
+                self.handle_size,
+                QBrush(QColor(255, 255, 255))
+            )
+            # 绘制边框（先保存当前画笔，设置新画笔，绘制后恢复）
+            old_pen = painter.pen()
+            painter.setPen(QPen(QColor(0, 0, 0), 1))
+            painter.drawRect(
+                pos.x() - self.handle_size // 2 - 1,
+                pos.y() - self.handle_size // 2 - 1,
+                self.handle_size + 1,
+                self.handle_size + 1
+            )
+            painter.setPen(old_pen)
+    
     def resizeEvent(self, event):
         """窗口大小变化时，保持当前缩放比例"""
         pass
+    
+    def wheelEvent(self, event):
+        """处理鼠标滚轮事件，实现Ctrl+滚轮缩放"""
+        # 检查是否按下了Ctrl键
+        if event.modifiers() & Qt.ControlModifier:
+            # 获取滚轮的角度变化
+            delta = event.angleDelta().y()
+            
+            # 计算缩放因子变化
+            if delta > 0:
+                # 滚轮向上，放大
+                new_scale = min(5.0, self.scale_factor + 0.1)
+            else:
+                # 滚轮向下，缩小
+                new_scale = max(0.1, self.scale_factor - 0.1)
+            
+            # 更新缩放因子
+            self.scale_factor = new_scale
+            
+            # 更新画布
+            if self.original_pixmap:
+                scaled_pixmap = self.original_pixmap.scaled(
+                    int(self.original_pixmap.width() * new_scale),
+                    int(self.original_pixmap.height() * new_scale),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+                self.setPixmap(scaled_pixmap)
+                self.update()
+            
+            # 发射缩放变化信号
+            self.scale_changed.emit(new_scale)
     
     def get_selected_rect(self):
         """获取选中的矩形"""
@@ -485,6 +713,7 @@ class SpriteSplitterGUI(QMainWindow):
         self.scale_slider.valueChanged.connect(self.on_scale_changed)
         self.canvas.rect_selected.connect(self.on_rect_selected)
         self.canvas.rect_updated.connect(self.on_rect_updated)
+        self.canvas.scale_changed.connect(self.on_canvas_scale_changed)
     
     def select_image(self):
         """选择图片文件"""
@@ -598,6 +827,14 @@ class SpriteSplitterGUI(QMainWindow):
     def remove_selected_rect(self):
         """删除选中的边框"""
         self.canvas.remove_selected_rect()
+    
+    def on_canvas_scale_changed(self, scale):
+        """处理画布缩放变化信号，更新UI控件"""
+        # 将缩放因子转换为百分比
+        scale_percent = int(scale * 100)
+        # 更新缩放滑块和标签
+        self.scale_slider.setValue(scale_percent)
+        self.scale_label.setText(f"{scale_percent}%")
     
     def on_scale_changed(self, value):
         """处理缩放比例变化"""
