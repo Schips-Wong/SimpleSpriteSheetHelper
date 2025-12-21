@@ -1,0 +1,460 @@
+import sys
+import os
+from PIL import Image, ImageDraw
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QLineEdit, QFileDialog, QGroupBox, QMessageBox,
+    QCheckBox, QSpinBox, QScrollArea, QAction, QMenu, QToolBar, QProgressBar,
+    QSlider
+)
+from PyQt5.QtGui import (
+    QPixmap, QImage, QPainter, QPen, QColor, QBrush, QCursor,
+    QMouseEvent, QPaintEvent, QKeyEvent, QIcon
+)
+from PyQt5.QtCore import Qt, QPoint, QRect, QThread, pyqtSignal, QObject
+
+
+class SpriteDetector(QObject):
+    """精灵检测类，用于自动识别精灵图中的精灵"""
+    
+    progress_updated = pyqtSignal(int)
+    detection_finished = pyqtSignal(list)
+    
+    def __init__(self, image_path, bg_color=None, threshold=50):
+        super().__init__()
+        self.image_path = image_path
+        self.bg_color = bg_color
+        self.threshold = threshold
+        self.sprite_rects = []
+    
+    def detect_sprites(self):
+        """检测精灵图中的所有精灵"""
+        try:
+            with Image.open(self.image_path) as img:
+                # 转换为RGBA模式
+                img = img.convert('RGBA')
+                pixels = img.load()
+                width, height = img.size
+                
+                # 如果没有指定背景颜色，则自动检测
+                if not self.bg_color:
+                    self.bg_color = self._detect_background_color(img)
+                
+                # 创建一个标记矩阵，用于记录已经访问过的像素
+                visited = [[False for _ in range(width)] for _ in range(height)]
+                
+                # 遍历所有像素，寻找精灵
+                for y in range(height):
+                    for x in range(width):
+                        if not visited[y][x]:
+                            pixel_color = pixels[x, y]
+                            # 如果当前像素不是背景色，且是不透明的，则检测精灵
+                            if pixel_color[3] > 128 and not self._is_background(pixel_color):
+                                # 使用BFS找到整个精灵区域
+                                rect = self._find_sprite_region(img, x, y, visited)
+                                if rect:
+                                    self.sprite_rects.append(rect)
+                    # 更新进度
+                    progress = int((y / height) * 100)
+                    self.progress_updated.emit(progress)
+            
+            # 发送检测完成信号
+            self.detection_finished.emit(self.sprite_rects)
+        except Exception as e:
+            QMessageBox.critical(None, "错误", f"检测精灵失败：{str(e)}")
+    
+    def _detect_background_color(self, img):
+        """自动检测背景颜色"""
+        # 采样四个角落的像素，取出现最多的颜色作为背景色
+        width, height = img.size
+        corners = [
+            img.getpixel((0, 0)),
+            img.getpixel((width-1, 0)),
+            img.getpixel((0, height-1)),
+            img.getpixel((width-1, height-1))
+        ]
+        
+        # 统计每个颜色出现的次数
+        color_counts = {}
+        for color in corners:
+            if color in color_counts:
+                color_counts[color] += 1
+            else:
+                color_counts[color] = 1
+        
+        # 返回出现次数最多的颜色
+        return max(color_counts, key=color_counts.get)
+    
+    def _is_background(self, pixel_color):
+        """判断像素是否为背景色"""
+        if pixel_color[3] < 128:  # 透明像素
+            return True
+        
+        # 计算与背景色的欧氏距离
+        distance = sum(
+            (a - b) ** 2 for a, b in zip(pixel_color[:3], self.bg_color[:3])
+        ) ** 0.5
+        
+        return distance < self.threshold
+    
+    def _find_sprite_region(self, img, start_x, start_y, visited):
+        """使用BFS找到精灵区域"""
+        width, height = img.size
+        pixels = img.load()
+        
+        # 初始化BFS队列
+        queue = [(start_x, start_y)]
+        visited[start_y][start_x] = True
+        
+        # 初始化精灵区域的边界
+        min_x, min_y = start_x, start_y
+        max_x, max_y = start_x, start_y
+        
+        # BFS遍历
+        while queue:
+            x, y = queue.pop(0)
+            
+            # 更新精灵区域边界
+            if x < min_x: min_x = x
+            if x > max_x: max_x = x
+            if y < min_y: min_y = y
+            if y > max_y: max_y = y
+            
+            # 检查八个方向的相邻像素
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    if dx == 0 and dy == 0:
+                        continue
+                    
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < width and 0 <= ny < height and not visited[ny][nx]:
+                        pixel_color = pixels[nx, ny]
+                        if pixel_color[3] > 128 and not self._is_background(pixel_color):
+                            visited[ny][nx] = True
+                            queue.append((nx, ny))
+        
+        # 计算精灵区域的宽度和高度
+        sprite_width = max_x - min_x + 1
+        sprite_height = max_y - min_y + 1
+        
+        # 过滤掉太小的区域（可能是噪点）
+        if sprite_width < 5 or sprite_height < 5:
+            return None
+        
+        return (min_x, min_y, sprite_width, sprite_height)
+
+
+class SpriteCanvas(QLabel):
+    """精灵图画布，用于显示和编辑精灵区域"""
+    
+    rect_selected = pyqtSignal(int)
+    rect_updated = pyqtSignal()
+    
+    def __init__(self):
+        super().__init__()
+        # 设置对齐方式为左上角对齐
+        self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.image_path = None
+        self.pixmap = None
+        self.original_pixmap = None
+        self.sprite_rects = []
+        self.selected_rect_index = -1
+        self.scale_factor = 1.0
+    
+    def set_scale(self, scale):
+        """设置缩放比例"""
+        self.scale_factor = scale
+        if self.original_pixmap:
+            scaled_pixmap = self.original_pixmap.scaled(
+                int(self.original_pixmap.width() * scale),
+                int(self.original_pixmap.height() * scale),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+            self.setPixmap(scaled_pixmap)
+            self.update()
+    
+    def set_image(self, image_path):
+        """设置显示的图片"""
+        self.image_path = image_path
+        self.original_pixmap = QPixmap(image_path)
+        self.set_scale(self.scale_factor)
+        self.sprite_rects = []
+        self.selected_rect_index = -1
+    
+    def set_sprite_rects(self, rects):
+        """设置精灵区域列表"""
+        self.sprite_rects = rects
+        self.selected_rect_index = -1
+        self.update()
+    
+    def paintEvent(self, event):
+        """绘制事件，用于绘制精灵区域框"""
+        super().paintEvent(event)
+        if not self.original_pixmap:
+            return
+        
+        painter = QPainter(self)
+        
+        # 绘制精灵区域框
+        for i, rect in enumerate(self.sprite_rects):
+            x, y, width, height = rect
+            
+            # 使用当前缩放因子计算绘制坐标
+            scaled_x = int(x * self.scale_factor)
+            scaled_y = int(y * self.scale_factor)
+            scaled_width = int(width * self.scale_factor)
+            scaled_height = int(height * self.scale_factor)
+            
+            # 创建绘制的矩形
+            draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
+            
+            # 设置画笔样式
+            if i == self.selected_rect_index:
+                pen = QPen(QColor(255, 0, 0), 2, Qt.SolidLine)
+                brush = QBrush(QColor(255, 0, 0, 30))
+            else:
+                pen = QPen(QColor(0, 255, 0), 1, Qt.SolidLine)
+                brush = QBrush(QColor(0, 255, 0, 30))
+            
+            painter.setPen(pen)
+            painter.setBrush(brush)
+            painter.drawRect(draw_rect)
+            
+            # 绘制矩形索引
+            painter.drawText(scaled_x + 5, scaled_y + 15, str(i+1))
+    
+
+    
+    def resizeEvent(self, event):
+        """窗口大小变化时，保持当前缩放比例"""
+        pass
+    
+    def get_selected_rect(self):
+        """获取选中的矩形"""
+        if self.selected_rect_index != -1:
+            return self.sprite_rects[self.selected_rect_index]
+        return None
+
+
+class SpriteSplitterGUI(QMainWindow):
+    """智能精灵图切分工具的图形界面"""
+    
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+        self.image_path = None
+        self.sprite_detector = None
+        self.detection_thread = None
+    
+    def init_ui(self):
+        """初始化界面"""
+        self.setWindowTitle("智能精灵图切分工具")
+        self.setGeometry(100, 100, 1000, 700)
+        
+        # 主窗口部件
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # 主布局
+        main_layout = QVBoxLayout(central_widget)
+        
+        # 预览区域
+        preview_group = QGroupBox("精灵预览")
+        preview_layout = QVBoxLayout(preview_group)
+        
+        # 滚动区域，用于显示大图片
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        
+        # 精灵画布
+        self.canvas = SpriteCanvas()
+        scroll_area.setWidget(self.canvas)
+        preview_layout.addWidget(scroll_area)
+        
+        # 主要功能按钮区域
+        main_buttons_layout = QHBoxLayout()
+        
+        self.select_image_btn = QPushButton("选择图片")
+        self.select_image_btn.clicked.connect(self.select_image)
+        main_buttons_layout.addWidget(self.select_image_btn)
+        
+        self.detect_sprites_btn = QPushButton("检测精灵")
+        self.detect_sprites_btn.clicked.connect(self.detect_sprites)
+        main_buttons_layout.addWidget(self.detect_sprites_btn)
+        
+        self.start_split_btn = QPushButton("开始分割")
+        self.start_split_btn.clicked.connect(self.start_split)
+        main_buttons_layout.addWidget(self.start_split_btn)
+        
+        # 控制区域
+        control_group = QGroupBox("控制选项")
+        control_layout = QVBoxLayout(control_group)
+        
+        # 检测阈值
+        threshold_layout = QHBoxLayout()
+        threshold_layout.addWidget(QLabel("自动检测阈值:"))
+        self.threshold_spin = QSpinBox()
+        self.threshold_spin.setRange(10, 200)
+        self.threshold_spin.setValue(50)
+        threshold_layout.addWidget(self.threshold_spin)
+        control_layout.addLayout(threshold_layout)
+        
+        # 图片路径显示
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("图片路径:"))
+        self.image_path_label = QLabel("未选择图片")
+        self.image_path_label.setWordWrap(True)
+        path_layout.addWidget(self.image_path_label)
+        control_layout.addLayout(path_layout)
+        
+        # 输出目录
+        output_layout = QHBoxLayout()
+        output_layout.addWidget(QLabel("输出目录:"))
+        self.output_dir_edit = QLineEdit("output")
+        output_layout.addWidget(self.output_dir_edit)
+        
+        self.browse_btn = QPushButton("浏览")
+        self.browse_btn.clicked.connect(self.browse_output_dir)
+        output_layout.addWidget(self.browse_btn)
+        control_layout.addLayout(output_layout)
+        
+        # 精灵区域列表
+        rects_layout = QHBoxLayout()
+        rects_layout.addWidget(QLabel("精灵数量:"))
+        self.rect_count_label = QLabel("0")
+        rects_layout.addWidget(self.rect_count_label)
+        control_layout.addLayout(rects_layout)
+        
+        # 缩放控制
+        scale_layout = QHBoxLayout()
+        scale_layout.addWidget(QLabel("缩放比例:"))
+        
+        # 缩放滑动条
+        self.scale_slider = QSlider(Qt.Horizontal)
+        self.scale_slider.setRange(10, 500)
+        self.scale_slider.setValue(100)
+        self.scale_slider.setTickPosition(QSlider.TicksBelow)
+        self.scale_slider.setTickInterval(50)
+        scale_layout.addWidget(self.scale_slider)
+        
+        # 缩放比例显示
+        self.scale_label = QLabel("100%")
+        scale_layout.addWidget(self.scale_label)
+        
+        control_layout.addLayout(scale_layout)
+        
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        control_layout.addWidget(self.progress_bar)
+        
+        # 将预览区域、主要功能按钮区域和控制区域添加到主布局
+        main_layout.addWidget(preview_group, 1)
+        main_layout.addLayout(main_buttons_layout)
+        main_layout.addWidget(control_group)
+        
+        # 连接缩放滑块信号
+        self.scale_slider.valueChanged.connect(self.on_scale_changed)
+    
+    def select_image(self):
+        """选择图片文件"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择精灵图", ".", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)"
+        )
+        
+        if file_path:
+            self.image_path = file_path
+            self.image_path_label.setText(file_path)
+            self.canvas.set_image(file_path)
+    
+    def browse_output_dir(self):
+        """浏览输出目录"""
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "选择输出目录", ".", QFileDialog.ShowDirsOnly
+        )
+        
+        if dir_path:
+            self.output_dir_edit.setText(dir_path)
+    
+    def detect_sprites(self):
+        """开始检测精灵"""
+        if not self.image_path:
+            QMessageBox.warning(self, "警告", "请先选择图片")
+            return
+        
+        # 显示进度条
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        
+        # 创建精灵检测器
+        self.sprite_detector = SpriteDetector(self.image_path, threshold=self.threshold_spin.value())
+        self.sprite_detector.progress_updated.connect(self.update_progress)
+        self.sprite_detector.detection_finished.connect(self.on_detection_finished)
+        
+        # 在新线程中执行检测，避免阻塞UI
+        self.detection_thread = QThread()
+        self.sprite_detector.moveToThread(self.detection_thread)
+        self.detection_thread.started.connect(self.sprite_detector.detect_sprites)
+        self.detection_thread.start()
+    
+    def update_progress(self, value):
+        """更新进度条"""
+        self.progress_bar.setValue(value)
+    
+    def on_detection_finished(self, rects):
+        """检测完成处理"""
+        self.progress_bar.setVisible(False)
+        self.canvas.set_sprite_rects(rects)
+        self.rect_count_label.setText(str(len(rects)))
+        self.detection_thread.quit()
+        self.detection_thread.wait()
+        
+        QMessageBox.information(self, "成功", f"检测完成！共检测到 {len(rects)} 个精灵")
+    
+
+    
+    def start_split(self):
+        """开始分割精灵"""
+        if not self.image_path:
+            QMessageBox.warning(self, "警告", "请先选择图片")
+            return
+        
+        sprite_rects = self.canvas.sprite_rects
+        if not sprite_rects:
+            QMessageBox.warning(self, "警告", "没有检测到精灵区域")
+            return
+        
+        try:
+            with Image.open(self.image_path) as img:
+                # 创建输出目录
+                output_dir = self.output_dir_edit.text()
+                os.makedirs(output_dir, exist_ok=True)
+                
+                # 分割精灵
+                base_name = os.path.splitext(os.path.basename(self.image_path))[0]
+                for i, rect in enumerate(sprite_rects):
+                    x, y, width, height = rect
+                    sprite = img.crop((x, y, x + width, y + height))
+                    output_path = os.path.join(output_dir, f"{base_name}_{i:04d}.png")
+                    sprite.save(output_path)
+            
+            QMessageBox.information(self, "成功", f"分割完成！共生成 {len(sprite_rects)} 个精灵图片")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"分割失败：{str(e)}")
+    
+    def on_scale_changed(self, value):
+        """处理缩放比例变化"""
+        # 将百分比转换为缩放因子
+        scale = value / 100.0
+        # 更新缩放标签
+        self.scale_label.setText(f"{value}%")
+        # 更新画布缩放
+        self.canvas.set_scale(scale)
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = SpriteSplitterGUI()
+    window.show()
+    sys.exit(app.exec_())
