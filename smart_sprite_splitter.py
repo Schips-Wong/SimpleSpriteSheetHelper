@@ -154,12 +154,20 @@ class SpriteCanvas(QLabel):
         super().__init__()
         # 设置对齐方式为左上角对齐
         self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        # 设置鼠标跟踪
+        self.setMouseTracking(True)
         self.image_path = None
         self.pixmap = None
         self.original_pixmap = None
         self.sprite_rects = []
         self.selected_rect_index = -1
+        self.hover_rect_index = -1
         self.scale_factor = 1.0
+        # 添加选框相关变量
+        self.is_drawing = False
+        self.start_pos = QPoint()
+        self.current_rect = QRect()
+        self.drawing_mode = False  # 是否处于绘制模式
     
     def set_scale(self, scale):
         """设置缩放比例"""
@@ -181,15 +189,27 @@ class SpriteCanvas(QLabel):
         self.set_scale(self.scale_factor)
         self.sprite_rects = []
         self.selected_rect_index = -1
+        self.hover_rect_index = -1
     
     def set_sprite_rects(self, rects):
         """设置精灵区域列表"""
         self.sprite_rects = rects
         self.selected_rect_index = -1
+        self.hover_rect_index = -1
+        self.update()
+    
+    def set_drawing_mode(self, mode):
+        """设置绘制模式"""
+        self.drawing_mode = mode
+        if mode:
+            self.setCursor(Qt.CrossCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+            self.hover_rect_index = -1
         self.update()
     
     def paintEvent(self, event):
-        """绘制事件，用于绘制精灵区域框"""
+        """绘制事件，用于绘制精灵区域框和正在创建的选框"""
         super().paintEvent(event)
         if not self.original_pixmap:
             return
@@ -213,6 +233,9 @@ class SpriteCanvas(QLabel):
             if i == self.selected_rect_index:
                 pen = QPen(QColor(255, 0, 0), 2, Qt.SolidLine)
                 brush = QBrush(QColor(255, 0, 0, 30))
+            elif i == self.hover_rect_index and not self.drawing_mode:
+                pen = QPen(QColor(255, 255, 0), 2, Qt.SolidLine)
+                brush = QBrush(QColor(255, 255, 0, 30))
             else:
                 pen = QPen(QColor(0, 255, 0), 1, Qt.SolidLine)
                 brush = QBrush(QColor(0, 255, 0, 30))
@@ -223,8 +246,102 @@ class SpriteCanvas(QLabel):
             
             # 绘制矩形索引
             painter.drawText(scaled_x + 5, scaled_y + 15, str(i+1))
+        
+        # 绘制正在创建的选框
+        if self.is_drawing:
+            pen = QPen(QColor(0, 0, 255), 2, Qt.DashLine)
+            brush = QBrush(QColor(0, 0, 255, 20))
+            painter.setPen(pen)
+            painter.setBrush(brush)
+            painter.drawRect(self.current_rect)
     
-
+    def mouseMoveEvent(self, event):
+        """鼠标移动事件，用于检测鼠标悬停的边框或绘制选框"""
+        mouse_pos = event.pos()
+        
+        if self.drawing_mode and self.is_drawing:
+            # 绘制模式下，更新正在创建的选框
+            self.current_rect = QRect(self.start_pos, mouse_pos).normalized()
+            self.update()
+        elif not self.drawing_mode:
+            # 非绘制模式下，检测鼠标悬停的边框
+            # 检查鼠标是否在某个精灵区域内
+            hover_index = -1
+            for i, rect in enumerate(self.sprite_rects):
+                x, y, width, height = rect
+                scaled_x = int(x * self.scale_factor)
+                scaled_y = int(y * self.scale_factor)
+                scaled_width = int(width * self.scale_factor)
+                scaled_height = int(height * self.scale_factor)
+                
+                draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
+                if draw_rect.contains(mouse_pos):
+                    hover_index = i
+                    break
+            
+            # 如果悬停的区域发生变化，更新并重新绘制
+            if hover_index != self.hover_rect_index:
+                self.hover_rect_index = hover_index
+                # 设置鼠标指针样式
+                if hover_index != -1:
+                    self.setCursor(Qt.PointingHandCursor)
+                else:
+                    self.setCursor(Qt.ArrowCursor)
+                self.update()
+    
+    def mousePressEvent(self, event):
+        """鼠标点击事件，用于选中边框或开始绘制选框"""
+        if event.button() == Qt.LeftButton:
+            if self.drawing_mode:
+                # 绘制模式下，开始创建选框
+                self.is_drawing = True
+                self.start_pos = event.pos()
+                self.current_rect = QRect(self.start_pos, self.start_pos)
+                self.update()
+            else:
+                # 非绘制模式下，选中边框
+                # 使用当前的hover_rect_index作为选中的区域
+                self.selected_rect_index = self.hover_rect_index
+                self.rect_selected.emit(self.selected_rect_index)
+                self.update()
+    
+    def mouseReleaseEvent(self, event):
+        """鼠标释放事件，用于完成选框绘制"""
+        if event.button() == Qt.LeftButton and self.drawing_mode and self.is_drawing:
+            self.is_drawing = False
+            # 计算选框的实际坐标（考虑缩放因子）
+            if not self.current_rect.isNull() and self.current_rect.width() > 5 and self.current_rect.height() > 5:
+                # 获取选框的左上角和右下角坐标
+                top_left = self.current_rect.topLeft()
+                bottom_right = self.current_rect.bottomRight()
+                
+                # 转换为原始图片坐标
+                orig_x = int(top_left.x() / self.scale_factor)
+                orig_y = int(top_left.y() / self.scale_factor)
+                orig_width = int(self.current_rect.width() / self.scale_factor)
+                orig_height = int(self.current_rect.height() / self.scale_factor)
+                
+                # 添加新的选框
+                self.add_rect((orig_x, orig_y, orig_width, orig_height))
+            
+            # 重置当前绘制的选框
+            self.current_rect = QRect()
+            self.update()
+    
+    def remove_selected_rect(self):
+        """删除选中的边框"""
+        if self.selected_rect_index != -1:
+            del self.sprite_rects[self.selected_rect_index]
+            self.selected_rect_index = -1
+            self.hover_rect_index = -1
+            self.rect_updated.emit()
+            self.update()
+    
+    def add_rect(self, rect):
+        """添加新的边框"""
+        self.sprite_rects.append(rect)
+        self.rect_updated.emit()
+        self.update()
     
     def resizeEvent(self, event):
         """窗口大小变化时，保持当前缩放比例"""
@@ -282,6 +399,16 @@ class SpriteSplitterGUI(QMainWindow):
         self.detect_sprites_btn = QPushButton("检测精灵")
         self.detect_sprites_btn.clicked.connect(self.detect_sprites)
         main_buttons_layout.addWidget(self.detect_sprites_btn)
+        
+        self.add_rect_btn = QPushButton("添加选框")
+        self.add_rect_btn.clicked.connect(self.toggle_drawing_mode)
+        self.add_rect_btn.setCheckable(True)  # 可切换状态
+        main_buttons_layout.addWidget(self.add_rect_btn)
+        
+        self.remove_rect_btn = QPushButton("删除选中边框")
+        self.remove_rect_btn.clicked.connect(self.remove_selected_rect)
+        self.remove_rect_btn.setEnabled(False)  # 初始禁用
+        main_buttons_layout.addWidget(self.remove_rect_btn)
         
         self.start_split_btn = QPushButton("开始分割")
         self.start_split_btn.clicked.connect(self.start_split)
@@ -354,8 +481,10 @@ class SpriteSplitterGUI(QMainWindow):
         main_layout.addLayout(main_buttons_layout)
         main_layout.addWidget(control_group)
         
-        # 连接缩放滑块信号
+        # 连接信号槽
         self.scale_slider.valueChanged.connect(self.on_scale_changed)
+        self.canvas.rect_selected.connect(self.on_rect_selected)
+        self.canvas.rect_updated.connect(self.on_rect_updated)
     
     def select_image(self):
         """选择图片文件"""
@@ -442,6 +571,33 @@ class SpriteSplitterGUI(QMainWindow):
             QMessageBox.information(self, "成功", f"分割完成！共生成 {len(sprite_rects)} 个精灵图片")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"分割失败：{str(e)}")
+    
+    def on_rect_selected(self, index):
+        """处理矩形选中信号"""
+        # 启用或禁用删除按钮
+        self.remove_rect_btn.setEnabled(index != -1)
+    
+    def on_rect_updated(self):
+        """处理矩形更新信号"""
+        # 更新精灵数量显示
+        self.rect_count_label.setText(str(len(self.canvas.sprite_rects)))
+        # 如果没有选中的矩形，禁用删除按钮
+        if self.canvas.selected_rect_index == -1:
+            self.remove_rect_btn.setEnabled(False)
+    
+    def toggle_drawing_mode(self, checked):
+        """切换绘制模式"""
+        self.canvas.set_drawing_mode(checked)
+        # 如果进入绘制模式，取消当前选中的边框
+        if checked:
+            self.canvas.selected_rect_index = -1
+            self.canvas.hover_rect_index = -1
+            self.canvas.rect_selected.emit(-1)
+            self.canvas.update()
+    
+    def remove_selected_rect(self):
+        """删除选中的边框"""
+        self.canvas.remove_selected_rect()
     
     def on_scale_changed(self, value):
         """处理缩放比例变化"""
