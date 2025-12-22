@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QListWidget, QFileDialog, QSpinBox, 
@@ -16,6 +17,9 @@ class SpriteAlignerGUI(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        # 初始化语言字典
+        self.language_dict = self.load_language_dict()
+        self.current_language = 'zh_CN'  # 默认中文
         # 先初始化所有属性
         self.image_files = []  # 存储导入的图片文件路径
         self.selected_index = -1  # 当前选中的图片索引
@@ -33,9 +37,209 @@ class SpriteAlignerGUI(QMainWindow):
         # 然后调用init_ui
         self.init_ui()
     
+    def load_language_dict(self):
+        """从JSON文件加载语言字典"""
+        language_file = os.path.join("translations", "languages_Sprite2SpriteSheet.json")
+        try:
+            with open(language_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"无法加载语言文件: {e}")
+            # 如果加载失败，返回默认的语言字典
+            return {
+                'zh_CN': {
+                    'window_title': '精灵图对齐工具',
+                    'control_options': '控制选项',
+                    'import_images': '导入分割图片',
+                    'grid_size': '网格大小:',
+                    'show_grid': '显示网格 (Ctrl+\')',
+                    'show_center': '显示中心点',
+                    'show_current_image': '显示当前图片 (H)',
+                    'reference_image': '参考图:',
+                    'show_reference': '显示参考图 (C)',
+                    'reference_opacity': '参考图透明度:',
+                    'workspace_zoom': '工作区缩放:',
+                    'zoom_out': '-',
+                    'zoom_in': '+',
+                    'reset_zoom': '重置缩放',
+                    'image_list': '图片列表',
+                    'move_up': '上移 (Q)',
+                    'move_down': '下移 (E)',
+                    'set_as_reference': '设为参考图 (F)',
+                    'delete_image': '删除图片 (Delete)',
+                    'alignment_control': '对齐控制',
+                    'x_offset': 'X偏移:',
+                    'y_offset': 'Y偏移:',
+                    'reset_offset': '重置偏移',
+                    'auto_alignment': '自动对齐:',
+                    'apply_to_current': '应用到当前图片 (F5)',
+                    'batch_apply': '批量应用到所有图片 (Ctrl+F5)',
+                    'workspace': '工作区',
+                    'stitch_settings': '拼接设置',
+                    'columns': '列数:',
+                    'rows': '行数:',
+                    'horizontal_spacing': '水平间距:',
+                    'vertical_spacing': '垂直间距:',
+                    'stitch_save': '拼接并保存精灵图 (Ctrl+S)',
+                    'select_split_images': '选择分割后的小图片',
+                    'success': '成功',
+                    'success_imported': '成功导入 {0} 张图片',
+                    'success_set_reference': '已将 \'{0}\' 设为参考图',
+                    'confirm_remove': '确认移除',
+                    'confirm_remove_image': '确定要移除图片 \'{0}\' 吗？',
+                    'warning': '警告',
+                    'cannot_load_image': '无法加载图片: {0}',
+                    'confirm_batch_align': '确认批量对齐',
+                    'confirm_batch_align_message': '确定要将 \'{0}\' 应用到所有 {1} 张图片吗？',
+                    'please_select_align_type': '请先选择对齐类型',
+                    'language': '语言:',
+                    'yes': '是',
+                    'no': '否',
+                    'none': '无',
+                    'left_align': '左对齐',
+                    'right_align': '右对齐',
+                    'top_align': '上对齐',
+                    'bottom_align': '下对齐',
+                    'center_align': '中心对齐',
+                    'no_image_selected': '请导入图片'
+                },
+                'en_US': {
+                    'window_title': 'Sprite Aligner',
+                    'control_options': 'Control Options',
+                    'import_images': 'Import Split Images',
+                    'grid_size': 'Grid Size:',
+                    'show_grid': 'Show Grid (Ctrl+\')',
+                    'show_center': 'Show Center Point',
+                    'show_current_image': 'Show Current Image (H)',
+                    'reference_image': 'Reference:',
+                    'show_reference': 'Show Reference (C)',
+                    'reference_opacity': 'Reference Opacity:',
+                    'workspace_zoom': 'Workspace Zoom:',
+                    'zoom_out': '-',
+                    'zoom_in': '+',
+                    'reset_zoom': 'Reset Zoom',
+                    'image_list': 'Image List',
+                    'move_up': 'Move Up (Q)',
+                    'move_down': 'Move Down (E)',
+                    'set_as_reference': 'Set as Reference (F)',
+                    'delete_image': 'Delete Image (Delete)',
+                    'alignment_control': 'Alignment Control',
+                    'x_offset': 'X Offset:',
+                    'y_offset': 'Y Offset:',
+                    'reset_offset': 'Reset Offset',
+                    'auto_alignment': 'Auto Alignment:',
+                    'apply_to_current': 'Apply to Current Image (F5)',
+                    'batch_apply': 'Batch Apply to All Images (Ctrl+F5)',
+                    'workspace': 'Workspace',
+                    'stitch_settings': 'Stitch Settings',
+                    'columns': 'Columns:',
+                    'rows': 'Rows:',
+                    'horizontal_spacing': 'Horizontal Spacing:',
+                    'vertical_spacing': 'Vertical Spacing:',
+                    'stitch_save': 'Stitch and Save Spritesheet (Ctrl+S)',
+                    'select_split_images': 'Select Split Images',
+                    'success': 'Success',
+                    'success_imported': 'Successfully imported {0} images',
+                    'success_set_reference': 'Set \'{0}\' as reference image',
+                    'confirm_remove': 'Confirm Remove',
+                    'confirm_remove_image': 'Are you sure you want to remove image \'{0}\'?',
+                    'warning': 'Warning',
+                    'cannot_load_image': 'Cannot load image: {0}',
+                    'confirm_batch_align': 'Confirm Batch Alignment',
+                    'confirm_batch_align_message': 'Are you sure you want to apply \'{0}\' to all {1} images?',
+                    'please_select_align_type': 'Please select alignment type first',
+                    'language': 'Language:',
+                    'yes': 'Yes',
+                    'no': 'No',
+                    'none': 'None',
+                    'left_align': 'Left Align',
+                    'right_align': 'Right Align',
+                    'top_align': 'Top Align',
+                    'bottom_align': 'Bottom Align',
+                    'center_align': 'Center Align',
+                    'no_image_selected': 'Please import images'
+                }
+            }
+        
+    def switch_language(self):
+        """切换语言"""
+        language = self.language_combo.currentData()
+        if language == self.current_language:
+            return
+        
+        self.current_language = language
+        
+        # 重新翻译界面
+        self.retranslate_ui()
+    
+    def retranslate_ui(self):
+        """重新翻译界面"""
+        lang = self.current_language
+        
+        # 更新窗口标题
+        self.setWindowTitle(self.language_dict[lang]['window_title'])
+        
+        # 更新语言标签
+        self.language_label.setText(self.language_dict[lang]['language'])
+        
+        # 更新分组框标题
+        self.control_group.setTitle(self.language_dict[lang]['control_options'])
+        self.list_group.setTitle(self.language_dict[lang]['image_list'])
+        self.align_group.setTitle(self.language_dict[lang]['alignment_control'])
+        self.preview_group.setTitle(self.language_dict[lang]['workspace'])
+        self.stitch_group.setTitle(self.language_dict[lang]['stitch_settings'])
+        
+        # 更新按钮文本
+        self.import_btn.setText(self.language_dict[lang]['import_images'])
+        self.zoom_out_btn.setText(self.language_dict[lang]['zoom_out'])
+        self.zoom_in_btn.setText(self.language_dict[lang]['zoom_in'])
+        self.reset_zoom_btn.setText(self.language_dict[lang]['reset_zoom'])
+        self.move_up_btn.setText(self.language_dict[lang]['move_up'])
+        self.move_down_btn.setText(self.language_dict[lang]['move_down'])
+        self.set_ref_btn.setText(self.language_dict[lang]['set_as_reference'])
+        self.delete_btn.setText(self.language_dict[lang]['delete_image'])
+        self.reset_btn.setText(self.language_dict[lang]['reset_offset'])
+        self.auto_align_btn.setText(self.language_dict[lang]['apply_to_current'])
+        self.batch_align_btn.setText(self.language_dict[lang]['batch_apply'])
+        self.stitch_save_btn.setText(self.language_dict[lang]['stitch_save'])
+        
+        # 更新标签文本
+        self.grid_size_label.setText(self.language_dict[lang]['grid_size'])
+        self.grid_check.setText(self.language_dict[lang]['show_grid'])
+        self.center_check.setText(self.language_dict[lang]['show_center'])
+        self.current_image_check.setText(self.language_dict[lang]['show_current_image'])
+        self.ref_label.setText(self.language_dict[lang]['reference_image'])
+        self.ref_check.setText(self.language_dict[lang]['show_reference'])
+        self.ref_opacity_label.setText(self.language_dict[lang]['reference_opacity'])
+        self.zoom_label_text.setText(self.language_dict[lang]['workspace_zoom'])
+        self.x_offset_label.setText(self.language_dict[lang]['x_offset'])
+        self.y_offset_label.setText(self.language_dict[lang]['y_offset'])
+        self.auto_label.setText(self.language_dict[lang]['auto_alignment'])
+        self.columns_label.setText(self.language_dict[lang]['columns'])
+        self.rows_label.setText(self.language_dict[lang]['rows'])
+        self.h_spacing_label.setText(self.language_dict[lang]['horizontal_spacing'])
+        self.v_spacing_label.setText(self.language_dict[lang]['vertical_spacing'])
+        
+        # 更新复选框文本
+        
+        # 更新自动对齐下拉框选项
+        self.auto_align_combo.clear()
+        self.auto_align_combo.addItems([
+            self.language_dict[lang]['none'],
+            self.language_dict[lang]['left_align'],
+            self.language_dict[lang]['right_align'],
+            self.language_dict[lang]['top_align'],
+            self.language_dict[lang]['bottom_align'],
+            self.language_dict[lang]['center_align']
+        ])
+        
+        # 更新工作区无图片提示
+        if not self.images_data:
+            self.workspace_label.setText(self.language_dict[lang]['no_image_selected'])
+    
     def init_ui(self):
         """初始化界面"""
-        self.setWindowTitle("精灵图对齐工具")
+        self.setWindowTitle(self.language_dict[self.current_language]['window_title'])
         self.setGeometry(100, 100, 1200, 800)
         
         # 设置快捷键
@@ -118,19 +322,32 @@ class SpriteAlignerGUI(QMainWindow):
         # 主布局
         main_layout = QVBoxLayout(central_widget)
         
+        # 语言选择布局
+        language_layout = QHBoxLayout()
+        language_layout.addStretch()
+        self.language_label = QLabel(self.language_dict[self.current_language]['language'])
+        language_layout.addWidget(self.language_label)
+        self.language_combo = QComboBox()
+        self.language_combo.addItem("中文", "zh_CN")
+        self.language_combo.addItem("English", "en_US")
+        self.language_combo.currentIndexChanged.connect(self.switch_language)
+        language_layout.addWidget(self.language_combo)
+        main_layout.addLayout(language_layout)
+        
         # 顶部控制区域
-        control_group = QGroupBox("控制选项")
-        control_layout = QGridLayout(control_group)
+        self.control_group = QGroupBox(self.language_dict[self.current_language]['control_options'])
+        control_layout = QGridLayout(self.control_group)
         # 限制控制选项区域的最大高度
-        control_group.setMaximumHeight(180)
+        self.control_group.setMaximumHeight(180)
         
         # 导入图片按钮
-        self.import_btn = QPushButton("导入分割图片")
+        self.import_btn = QPushButton(self.language_dict[self.current_language]['import_images'])
         self.import_btn.clicked.connect(self.import_images)
         control_layout.addWidget(self.import_btn, 0, 0)
         
         # 网格大小设置
-        control_layout.addWidget(QLabel("网格大小:"), 0, 1)
+        self.grid_size_label = QLabel(self.language_dict[self.current_language]['grid_size'])
+        control_layout.addWidget(self.grid_size_label, 0, 1)
         self.grid_spin = QSpinBox()
         self.grid_spin.setRange(8, 256)
         self.grid_spin.setValue(64)
@@ -138,52 +355,55 @@ class SpriteAlignerGUI(QMainWindow):
         control_layout.addWidget(self.grid_spin, 0, 2)
         
         # 显示选项
-        self.grid_check = QCheckBox("显示网格 (Ctrl+')")
+        self.grid_check = QCheckBox(self.language_dict[self.current_language]['show_grid'])
         self.grid_check.setChecked(True)
         self.grid_check.stateChanged.connect(self.toggle_grid)
         control_layout.addWidget(self.grid_check, 0, 3)
         
-        self.center_check = QCheckBox("显示中心点")
+        self.center_check = QCheckBox(self.language_dict[self.current_language]['show_center'])
         self.center_check.setChecked(True)
         self.center_check.stateChanged.connect(self.toggle_center)
         control_layout.addWidget(self.center_check, 0, 4)
         
         # 当前图片显示选项
-        self.current_image_check = QCheckBox("显示当前图片 (H)")
+        self.current_image_check = QCheckBox(self.language_dict[self.current_language]['show_current_image'])
         self.current_image_check.setChecked(True)
         self.current_image_check.stateChanged.connect(self.toggle_current_image)
         control_layout.addWidget(self.current_image_check, 0, 5)
         
         # 参考图选项
-        control_layout.addWidget(QLabel("参考图:"), 1, 0)
+        self.ref_label = QLabel(self.language_dict[self.current_language]['reference_image'])
+        control_layout.addWidget(self.ref_label, 1, 0)
         self.ref_combo = QComboBox()
         self.ref_combo.setEnabled(False)
         self.ref_combo.currentIndexChanged.connect(self.set_reference_image)
         control_layout.addWidget(self.ref_combo, 1, 1, 1, 2)
         
-        self.ref_check = QCheckBox("显示参考图 (C)")
+        self.ref_check = QCheckBox(self.language_dict[self.current_language]['show_reference'])
         self.ref_check.setChecked(False)
         self.ref_check.stateChanged.connect(self.toggle_reference)
         self.ref_check.setEnabled(False)
         control_layout.addWidget(self.ref_check, 1, 3)
         
         # 参考图透明度
-        control_layout.addWidget(QLabel("参考图透明度:"), 2, 0)
+        self.ref_opacity_label = QLabel(self.language_dict[self.current_language]['reference_opacity'])
+        control_layout.addWidget(self.ref_opacity_label, 2, 0)
         self.ref_opacity_slider = QSlider(Qt.Horizontal)
         self.ref_opacity_slider.setRange(10, 100)
         self.ref_opacity_slider.setValue(50)
         self.ref_opacity_slider.setEnabled(False)
         self.ref_opacity_slider.valueChanged.connect(self.update_ref_opacity)
         control_layout.addWidget(self.ref_opacity_slider, 2, 1, 1, 3)
-        
-        self.ref_opacity_label = QLabel("50%")
-        control_layout.addWidget(self.ref_opacity_label, 2, 4)
+        # 参考图透明度值标签
+        self.ref_opacity_value_label = QLabel("50%") 
+        control_layout.addWidget(self.ref_opacity_value_label, 2, 4)
         
         # 工作区缩放控制
-        control_layout.addWidget(QLabel("工作区缩放:"), 3, 0)
+        self.zoom_label_text = QLabel(self.language_dict[self.current_language]['workspace_zoom'])
+        control_layout.addWidget(self.zoom_label_text, 3, 0)
         zoom_layout = QHBoxLayout()
         
-        self.zoom_out_btn = QPushButton("-")
+        self.zoom_out_btn = QPushButton(self.language_dict[self.current_language]['zoom_out'])
         self.zoom_out_btn.clicked.connect(self.zoom_out)
         self.zoom_out_btn.setEnabled(False)
         zoom_layout.addWidget(self.zoom_out_btn)
@@ -195,12 +415,12 @@ class SpriteAlignerGUI(QMainWindow):
         self.zoom_slider.valueChanged.connect(self.update_zoom)
         zoom_layout.addWidget(self.zoom_slider, 1)
         
-        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn = QPushButton(self.language_dict[self.current_language]['zoom_in'])
         self.zoom_in_btn.clicked.connect(self.zoom_in)
         self.zoom_in_btn.setEnabled(False)
         zoom_layout.addWidget(self.zoom_in_btn)
         
-        self.reset_zoom_btn = QPushButton("重置缩放")
+        self.reset_zoom_btn = QPushButton(self.language_dict[self.current_language]['reset_zoom'])
         self.reset_zoom_btn.clicked.connect(self.reset_zoom)
         self.reset_zoom_btn.setEnabled(False)
         zoom_layout.addWidget(self.reset_zoom_btn)
@@ -214,8 +434,8 @@ class SpriteAlignerGUI(QMainWindow):
         work_layout = QHBoxLayout()
         
         # 左侧图片列表
-        list_group = QGroupBox("图片列表")
-        list_layout = QVBoxLayout(list_group)
+        self.list_group = QGroupBox(self.language_dict[self.current_language]['image_list'])
+        list_layout = QVBoxLayout(self.list_group)
         
         self.image_list = QListWidget()
         self.image_list.itemClicked.connect(self.select_image)
@@ -233,22 +453,22 @@ class SpriteAlignerGUI(QMainWindow):
         # 添加图片排序控制按钮
         order_layout = QHBoxLayout()
         
-        self.move_up_btn = QPushButton("上移 (Q)")
+        self.move_up_btn = QPushButton(self.language_dict[self.current_language]['move_up'])
         self.move_up_btn.clicked.connect(self.move_selected_up)
         self.move_up_btn.setEnabled(False)
         order_layout.addWidget(self.move_up_btn)
         
-        self.move_down_btn = QPushButton("下移 (E)")
+        self.move_down_btn = QPushButton(self.language_dict[self.current_language]['move_down'])
         self.move_down_btn.clicked.connect(self.move_selected_down)
         self.move_down_btn.setEnabled(False)
         order_layout.addWidget(self.move_down_btn)
         
-        self.set_ref_btn = QPushButton("设为参考图 (F)")
+        self.set_ref_btn = QPushButton(self.language_dict[self.current_language]['set_as_reference'])
         self.set_ref_btn.clicked.connect(self.set_selected_as_reference)
         self.set_ref_btn.setEnabled(False)
         order_layout.addWidget(self.set_ref_btn)
         
-        self.delete_btn = QPushButton("删除图片 (Delete)")
+        self.delete_btn = QPushButton(self.language_dict[self.current_language]['delete_image'])
         self.delete_btn.clicked.connect(self.delete_selected_image)
         self.delete_btn.setEnabled(False)
         order_layout.addWidget(self.delete_btn)
@@ -256,12 +476,13 @@ class SpriteAlignerGUI(QMainWindow):
         list_layout.addLayout(order_layout)
         
         # 右侧对齐控制
-        align_group = QGroupBox("对齐控制")
-        align_layout = QVBoxLayout(align_group)
+        self.align_group = QGroupBox(self.language_dict[self.current_language]['alignment_control'])
+        align_layout = QVBoxLayout(self.align_group)
         
         # X坐标控制
         x_layout = QHBoxLayout()
-        x_layout.addWidget(QLabel("X偏移:"))
+        self.x_offset_label = QLabel(self.language_dict[self.current_language]['x_offset'])
+        x_layout.addWidget(self.x_offset_label)
         self.x_spin = QSpinBox()
         self.x_spin.setRange(-500, 500)
         self.x_spin.setValue(0)
@@ -271,7 +492,8 @@ class SpriteAlignerGUI(QMainWindow):
         
         # Y坐标控制
         y_layout = QHBoxLayout()
-        y_layout.addWidget(QLabel("Y偏移:"))
+        self.y_offset_label = QLabel(self.language_dict[self.current_language]['y_offset'])
+        y_layout.addWidget(self.y_offset_label)
         self.y_spin = QSpinBox()
         self.y_spin.setRange(-500, 500)
         self.y_spin.setValue(0)
@@ -280,7 +502,7 @@ class SpriteAlignerGUI(QMainWindow):
         align_layout.addLayout(y_layout)
         
         # 重置偏移按钮
-        self.reset_btn = QPushButton("重置偏移")
+        self.reset_btn = QPushButton(self.language_dict[self.current_language]['reset_offset'])
         self.reset_btn.clicked.connect(self.reset_offset)
         align_layout.addWidget(self.reset_btn)
         
@@ -289,9 +511,17 @@ class SpriteAlignerGUI(QMainWindow):
         
         # 创建水平布局来容纳标签和下拉框
         auto_label_layout = QHBoxLayout()
-        auto_label_layout.addWidget(QLabel("自动对齐:"))
+        self.auto_label = QLabel(self.language_dict[self.current_language]['auto_alignment'])
+        auto_label_layout.addWidget(self.auto_label)
         self.auto_align_combo = QComboBox()
-        self.auto_align_combo.addItems(["无", "左对齐", "右对齐", "上对齐", "下对齐", "中心对齐"])
+        self.auto_align_combo.addItems([
+            self.language_dict[self.current_language]['none'],
+            self.language_dict[self.current_language]['left_align'],
+            self.language_dict[self.current_language]['right_align'],
+            self.language_dict[self.current_language]['top_align'],
+            self.language_dict[self.current_language]['bottom_align'],
+            self.language_dict[self.current_language]['center_align']
+        ])
         auto_label_layout.addWidget(self.auto_align_combo)
         auto_label_layout.addStretch()  # 添加拉伸空间，将组件靠左对齐
         
@@ -299,11 +529,11 @@ class SpriteAlignerGUI(QMainWindow):
         auto_layout.addLayout(auto_label_layout)
         
         # 单个对齐按钮
-        self.auto_align_btn = QPushButton("应用到当前图片 (F5)")
+        self.auto_align_btn = QPushButton(self.language_dict[self.current_language]['apply_to_current'])
         self.auto_align_btn.clicked.connect(self.apply_auto_align)
         
         # 批量对齐按钮
-        self.batch_align_btn = QPushButton("批量应用到所有图片 (Ctrl+F5)")
+        self.batch_align_btn = QPushButton(self.language_dict[self.current_language]['batch_apply'])
         self.batch_align_btn.clicked.connect(self.batch_apply_auto_align)
         
         auto_layout.addWidget(self.auto_align_btn)
@@ -311,8 +541,8 @@ class SpriteAlignerGUI(QMainWindow):
         align_layout.addLayout(auto_layout)
         
         # 中间工作区预览
-        preview_group = QGroupBox("工作区")
-        preview_layout = QVBoxLayout(preview_group)
+        self.preview_group = QGroupBox(self.language_dict[self.current_language]['workspace'])
+        preview_layout = QVBoxLayout(self.preview_group)
         
         # 创建滚动区域
         scroll_area = QScrollArea()
@@ -322,6 +552,7 @@ class SpriteAlignerGUI(QMainWindow):
         self.workspace_label.setAlignment(Qt.AlignCenter)
         self.workspace_label.setMinimumSize(600, 600)
         self.workspace_label.setStyleSheet("border: 1px solid #ccc")
+        self.workspace_label.setText(self.language_dict[self.current_language]['no_image_selected'])
         self.workspace_label.mousePressEvent = self.workspace_click
         self.workspace_label.mouseMoveEvent = self.workspace_drag
         self.workspace_label.mouseReleaseEvent = self.workspace_release
@@ -332,9 +563,9 @@ class SpriteAlignerGUI(QMainWindow):
         
         # 使用QSplitter来分割区域
         splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(list_group)
-        splitter.addWidget(preview_group)
-        splitter.addWidget(align_group)
+        splitter.addWidget(self.list_group)
+        splitter.addWidget(self.preview_group)
+        splitter.addWidget(self.align_group)
         
         # 设置初始大小
         splitter.setSizes([200, 600, 200])
@@ -348,32 +579,36 @@ class SpriteAlignerGUI(QMainWindow):
         work_layout.addWidget(splitter)
         
         # 底部拼接控制
-        stitch_group = QGroupBox("拼接设置")
-        stitch_layout = QGridLayout(stitch_group)
+        self.stitch_group = QGroupBox(self.language_dict[self.current_language]['stitch_settings'])
+        stitch_layout = QGridLayout(self.stitch_group)
         # 限制拼接设置区域的高度
-        stitch_group.setMaximumHeight(120)
+        self.stitch_group.setMaximumHeight(120)
         
         # 行列数设置
-        stitch_layout.addWidget(QLabel("列数:"), 0, 0)
+        self.columns_label = QLabel(self.language_dict[self.current_language]['columns'])
+        stitch_layout.addWidget(self.columns_label, 0, 0)
         self.cols_spin = QSpinBox()
         self.cols_spin.setRange(1, 100)
         self.cols_spin.setValue(10)
         stitch_layout.addWidget(self.cols_spin, 0, 1)
         
-        stitch_layout.addWidget(QLabel("行数:"), 0, 2)
+        self.rows_label = QLabel(self.language_dict[self.current_language]['rows'])
+        stitch_layout.addWidget(self.rows_label, 0, 2)
         self.rows_spin = QSpinBox()
         self.rows_spin.setRange(1, 100)
         self.rows_spin.setValue(10)
         stitch_layout.addWidget(self.rows_spin, 0, 3)
         
         # 间距设置
-        stitch_layout.addWidget(QLabel("水平间距:"), 1, 0)
+        self.h_spacing_label = QLabel(self.language_dict[self.current_language]['horizontal_spacing'])
+        stitch_layout.addWidget(self.h_spacing_label, 1, 0)
         self.h_spacing_spin = QSpinBox()
         self.h_spacing_spin.setRange(0, 100)
         self.h_spacing_spin.setValue(0)
         stitch_layout.addWidget(self.h_spacing_spin, 1, 1)
         
-        stitch_layout.addWidget(QLabel("垂直间距:"), 1, 2)
+        self.v_spacing_label = QLabel(self.language_dict[self.current_language]['vertical_spacing'])
+        stitch_layout.addWidget(self.v_spacing_label, 1, 2)
         self.v_spacing_spin = QSpinBox()
         self.v_spacing_spin.setRange(0, 100)
         self.v_spacing_spin.setValue(0)
@@ -382,15 +617,15 @@ class SpriteAlignerGUI(QMainWindow):
         # 底部按钮区域
         button_layout = QHBoxLayout()
         
-        self.stitch_save_btn = QPushButton("拼接并保存精灵图 (Ctrl+S)")
+        self.stitch_save_btn = QPushButton(self.language_dict[self.current_language]['stitch_save'])
         self.stitch_save_btn.clicked.connect(self.stitch_and_save_sprites)
         self.stitch_save_btn.setEnabled(False)
         button_layout.addWidget(self.stitch_save_btn)
         
         # 添加到主布局
-        main_layout.addWidget(control_group)
+        main_layout.addWidget(self.control_group)
         main_layout.addLayout(work_layout)
-        main_layout.addWidget(stitch_group)
+        main_layout.addWidget(self.stitch_group)
         main_layout.addLayout(button_layout)
         
         # 设置垂直拉伸因子，让工作区获得更多垂直空间
@@ -415,7 +650,7 @@ class SpriteAlignerGUI(QMainWindow):
         """导入分割后的小图片"""
         # 打开文件选择对话框，允许选择多个图片文件
         file_paths, _ = QFileDialog.getOpenFileNames(
-            self, "选择分割后的小图片", ".", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)"
+            self, self.language_dict[self.current_language]['select_split_images'], ".", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         
         if file_paths:
@@ -443,7 +678,8 @@ class SpriteAlignerGUI(QMainWindow):
                 self.image_list.addItem(filename)
                 self.ref_combo.addItem(filename)
             
-            QMessageBox.information(self, "成功", f"成功导入 {len(file_paths)} 张图片")
+            QMessageBox.information(self, self.language_dict[self.current_language]['success'], 
+                                   self.language_dict[self.current_language]['success_imported'].format(len(file_paths)))
             self.stitch_save_btn.setEnabled(True)
             
             # 启用相关控件
@@ -514,7 +750,9 @@ class SpriteAlignerGUI(QMainWindow):
             self.ref_index = self.selected_index
             # 更新参考图下拉框
             self.ref_combo.setCurrentIndex(self.selected_index)
-            QMessageBox.information(self, "成功", f"已将 '{os.path.basename(self.images_data[self.selected_index]['file_path'])}' 设为参考图")
+            QMessageBox.information(self, self.language_dict[self.current_language]['success'], 
+                                   self.language_dict[self.current_language]['success_set_reference'].format(
+                                       os.path.basename(self.images_data[self.selected_index]['file_path'])))
             self.update_workspace()
     
     def delete_selected_image(self):
@@ -528,7 +766,8 @@ class SpriteAlignerGUI(QMainWindow):
         
         # 显示确认对话框
         reply = QMessageBox.question(
-            self, "确认移除", f"确定要移除图片 '{img_name}' 吗？",
+            self, self.language_dict[self.current_language]['confirm_remove'], 
+            self.language_dict[self.current_language]['confirm_remove_image'].format(img_name),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         
@@ -797,7 +1036,7 @@ class SpriteAlignerGUI(QMainWindow):
     def update_ref_opacity(self, value):
         """更新参考图透明度"""
         self.ref_opacity = value / 100.0
-        self.ref_opacity_label.setText(f"{value}%")
+        self.ref_opacity_value_label.setText(f"{value}%")
         self.update_workspace()
     
     def zoom_in(self):
@@ -987,13 +1226,16 @@ class SpriteAlignerGUI(QMainWindow):
     def batch_apply_auto_align(self):
         """批量应用自动对齐到所有图片"""
         align_type = self.auto_align_combo.currentText()
-        if align_type == "无":
-            QMessageBox.warning(self, "警告", "请先选择对齐类型")
+        if align_type == self.language_dict[self.current_language]['none']:
+            QMessageBox.warning(self, self.language_dict[self.current_language]['warning'], 
+                              self.language_dict[self.current_language]['please_select_align_type'])
             return
         
         # 显示确认对话框
         reply = QMessageBox.question(
-            self, "确认批量对齐", f"确定要将 '{align_type}' 应用到所有 {len(self.images_data)} 张图片吗？",
+            self, self.language_dict[self.current_language]['confirm_batch_align'], 
+            self.language_dict[self.current_language]['confirm_batch_align_message'].format(
+                align_type, len(self.images_data)),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         
