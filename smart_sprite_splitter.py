@@ -632,7 +632,8 @@ class SpriteSplitterGUI(QMainWindow):
                     'no_sprite_regions_detected': '没有检测到精灵区域',
                     'splitting_completed': '分割完成！共生成 {0} 个精灵图片',
                     'error': '错误',
-                    'splitting_failed': '分割失败：{0}'
+                    'splitting_failed': '分割失败：{0}',
+                    'transparent_background': '透明化背景'
                 },
                 'en_US': {
                     'window_title': 'Smart Sprite Splitter',
@@ -660,7 +661,8 @@ class SpriteSplitterGUI(QMainWindow):
                     'no_sprite_regions_detected': 'No sprite regions detected',
                     'splitting_completed': 'Splitting completed! Generated {0} sprite images',
                     'error': 'Error',
-                    'splitting_failed': 'Splitting failed: {0}'
+                    'splitting_failed': 'Splitting failed: {0}',
+                    'transparent_background': 'Transparent Background'
                 }
             }
 
@@ -788,6 +790,13 @@ class SpriteSplitterGUI(QMainWindow):
 
         control_layout.addLayout(scale_layout)
 
+        # 透明化背景选项
+        transparent_layout = QHBoxLayout()
+        self.transparent_checkbox = QCheckBox(self.language_dict[self.current_language]['transparent_background'])
+        self.transparent_checkbox.setChecked(True)
+        transparent_layout.addWidget(self.transparent_checkbox)
+        control_layout.addLayout(transparent_layout)
+
         # 进度条
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
@@ -882,11 +891,27 @@ class SpriteSplitterGUI(QMainWindow):
                 output_dir = self.output_dir_edit.text()
                 os.makedirs(output_dir, exist_ok=True)
 
+                # 检测背景颜色（如果需要透明化背景）
+                bg_color = None
+                if self.transparent_checkbox.isChecked():
+                    # 转换为RGBA模式以便处理
+                    img = img.convert('RGBA')
+                    bg_color = self._detect_background_color(img)
+                else:
+                    # 确保图像是RGBA模式，以便后续处理
+                    if img.mode != 'RGBA':
+                        img = img.convert('RGBA')
+
                 # 分割精灵
                 base_name = os.path.splitext(os.path.basename(self.image_path))[0]
                 for i, rect in enumerate(sprite_rects):
                     x, y, width, height = rect
                     sprite = img.crop((x, y, x + width, y + height))
+                    
+                    # 如果需要透明化背景，处理精灵图像
+                    if bg_color:
+                        sprite = self._make_background_transparent(sprite, bg_color)
+                    
                     output_path = os.path.join(output_dir, f"{base_name}_{i:04d}.png")
                     sprite.save(output_path)
 
@@ -895,6 +920,56 @@ class SpriteSplitterGUI(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, self.language_dict[self.current_language]['error'],
                                self.language_dict[self.current_language]['splitting_failed'].format(str(e)))
+
+    def _detect_background_color(self, img):
+        """自动检测背景颜色"""
+        # 采样四个角落的像素，取出现最多的颜色作为背景色
+        width, height = img.size
+        corners = [
+            img.getpixel((0, 0)),
+            img.getpixel((width-1, 0)),
+            img.getpixel((0, height-1)),
+            img.getpixel((width-1, height-1))
+        ]
+
+        # 统计每个颜色出现的次数
+        color_counts = {}
+        for color in corners:
+            if color in color_counts:
+                color_counts[color] += 1
+            else:
+                color_counts[color] = 1
+
+        # 返回出现次数最多的颜色
+        return max(color_counts, key=color_counts.get)
+
+    def _make_background_transparent(self, img, bg_color, threshold=50):
+        """将背景颜色转换为透明"""
+        # 确保图像是RGBA模式
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        pixels = img.load()
+        width, height = img.size
+        
+        # 遍历所有像素
+        for y in range(height):
+            for x in range(width):
+                pixel_color = pixels[x, y]
+                # 如果当前像素与背景颜色相似，设置为透明
+                if self._is_similar_color(pixel_color, bg_color, threshold):
+                    pixels[x, y] = (0, 0, 0, 0)  # 设置为透明
+        
+        return img
+    
+    def _is_similar_color(self, color1, color2, threshold):
+        """判断两种颜色是否相似"""
+        # 计算RGB三个通道的欧氏距离
+        distance = sum(
+            (a - b) ** 2 for a, b in zip(color1[:3], color2[:3])
+        ) ** 0.5
+        
+        return distance < threshold
 
     def on_rect_selected(self, index):
         """处理矩形选中信号"""
@@ -981,6 +1056,7 @@ class SpriteSplitterGUI(QMainWindow):
         self.output_dir_label.setText(self.language_dict[lang]['output_directory'])
         self.rect_count_label_text.setText(self.language_dict[lang]['sprite_count'])
         self.scale_label_text.setText(self.language_dict[lang]['scale'])
+        self.transparent_checkbox.setText(self.language_dict[lang]['transparent_background'])
 
 
 
