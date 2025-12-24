@@ -25,7 +25,8 @@
         "no_sprite_regions_detected": "没有检测到精灵区域",
         "splitting_completed": "分割完成！共生成 {0} 个精灵图片",
         "error": "错误",
-        "splitting_failed": "分割失败：{0}"
+        "splitting_failed": "分割失败：{0}",
+        "transparent_background": "透明化背景"
     },
     "en_US": {
         "window_title": "Smart Sprite Splitter",
@@ -53,6 +54,7 @@
         "no_sprite_regions_detected": "No sprite regions detected",
         "splitting_completed": "Splitting completed! Generated {0} sprite images",
         "error": "Error",
-        "splitting_failed": "Splitting failed: {0}"
+        "splitting_failed": "Splitting failed: {0}",
+        "transparent_background": "Transparent Background"
     }
 }
