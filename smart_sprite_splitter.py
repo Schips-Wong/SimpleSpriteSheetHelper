@@ -1068,6 +1068,10 @@ class SpriteSplitterGUI(QMainWindow):
         self.remove_rect_btn.setEnabled(False)  # 初始禁用
         main_buttons_layout.addWidget(self.remove_rect_btn)
 
+        self.clear_all_rects_btn = QPushButton(self.language_dict[self.current_language]['clear_all_rects'])
+        self.clear_all_rects_btn.clicked.connect(self.clear_all_rects)
+        main_buttons_layout.addWidget(self.clear_all_rects_btn)
+
         self.start_split_btn = QPushButton(self.language_dict[self.current_language]['start_split'])
         self.start_split_btn.clicked.connect(self.start_split)
         main_buttons_layout.addWidget(self.start_split_btn)
@@ -1364,6 +1368,16 @@ class SpriteSplitterGUI(QMainWindow):
     def remove_selected_rect(self):
         """删除选中的边框"""
         self.canvas.remove_selected_rect()
+
+    def clear_all_rects(self):
+        """清除所有边框"""
+        self.canvas.sprite_rects = []
+        self.canvas.selected_rect_index = -1
+        self.canvas.hover_rect_index = -1
+        self.canvas.rect_selected.emit(-1)
+        self.canvas.update()
+        self.rect_count_label.setText("0")
+        self.remove_rect_btn.setEnabled(False)
 
     def remove_selected_detection_area(self):
         """删除选中的检测范围"""
