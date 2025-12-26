@@ -26,7 +26,10 @@
         "splitting_completed": "分割完成！共生成 {0} 个精灵图片",
         "error": "错误",
         "splitting_failed": "分割失败：{0}",
-        "transparent_background": "透明化背景"
+        "transparent_background": "透明化背景",
+        "add_detection_area": "添加检测范围",
+        "remove_detection_area": "删除选中检测范围",
+        "clear_detection_areas": "清除所有检测范围"
     },
     "en_US": {
         "window_title": "Smart Sprite Splitter",
@@ -55,6 +58,9 @@
         "splitting_completed": "Splitting completed! Generated {0} sprite images",
         "error": "Error",
         "splitting_failed": "Splitting failed: {0}",
-        "transparent_background": "Transparent Background"
+        "transparent_background": "Transparent Background",
+        "add_detection_area": "Add Detection Area",
+        "remove_detection_area": "Delete Selected Detection Area",
+        "clear_detection_areas": "Clear All Detection Areas"
     }
 }
