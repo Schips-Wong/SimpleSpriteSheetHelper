@@ -103,7 +103,9 @@ class SpriteAlignerGUI(QMainWindow):
                     'center_align': '中心对齐',
                     'no_image_selected': '请导入图片',
                     'single_image_width': '单个图片宽度:',
-                    'single_image_height': '单个图片高度:'
+                    'single_image_height': '单个图片高度:',
+                    'export_offset': '导出偏移设置',
+                    'import_offset': '导入偏移设置'
                 },
                 'en_US': {
                     'window_title': 'Sprite Aligner',
@@ -161,7 +163,9 @@ class SpriteAlignerGUI(QMainWindow):
                     'center_align': 'Center Align',
                     'no_image_selected': 'Please import images',
                     'single_image_width': 'Single Image Width:',
-                    'single_image_height': 'Single Image Height:'
+                    'single_image_height': 'Single Image Height:',
+                    'export_offset': 'Export Offset Settings',
+                    'import_offset': 'Import Offset Settings'
                 }
             }
         
@@ -541,6 +545,11 @@ class SpriteAlignerGUI(QMainWindow):
         # 添加到垂直布局中
         auto_layout.addLayout(auto_label_layout)
         
+        # 检查语言字典中是否包含导入导出偏移设置的键
+        if 'export_offset' not in self.language_dict[self.current_language]:
+            self.language_dict[self.current_language]['export_offset'] = '导出偏移设置'
+            self.language_dict[self.current_language]['import_offset'] = '导入偏移设置'
+        
         # 单个对齐按钮
         self.auto_align_btn = QPushButton(self.language_dict[self.current_language]['apply_to_current'])
         self.auto_align_btn.clicked.connect(self.apply_auto_align)
@@ -549,8 +558,20 @@ class SpriteAlignerGUI(QMainWindow):
         self.batch_align_btn = QPushButton(self.language_dict[self.current_language]['batch_apply'])
         self.batch_align_btn.clicked.connect(self.batch_apply_auto_align)
         
+        # 导出偏移设置按钮
+        self.export_offset_btn = QPushButton(self.language_dict[self.current_language]['export_offset'])
+        self.export_offset_btn.clicked.connect(self.export_offset_settings)
+        self.export_offset_btn.setEnabled(False)
+        
+        # 导入偏移设置按钮
+        self.import_offset_btn = QPushButton(self.language_dict[self.current_language]['import_offset'])
+        self.import_offset_btn.clicked.connect(self.import_offset_settings)
+        self.import_offset_btn.setEnabled(False)
+        
         auto_layout.addWidget(self.auto_align_btn)
         auto_layout.addWidget(self.batch_align_btn)
+        auto_layout.addWidget(self.export_offset_btn)
+        auto_layout.addWidget(self.import_offset_btn)
         align_layout.addLayout(auto_layout)
         
         # 中间工作区预览
@@ -633,6 +654,11 @@ class SpriteAlignerGUI(QMainWindow):
             self.language_dict[self.current_language]['single_image_width'] = '单个图片宽度:'
             self.language_dict[self.current_language]['single_image_height'] = '单个图片高度:'
         
+        # 检查语言字典中是否包含导入导出偏移设置的键
+        if 'export_offset' not in self.language_dict[self.current_language]:
+            self.language_dict[self.current_language]['export_offset'] = '导出偏移设置'
+            self.language_dict[self.current_language]['import_offset'] = '导入偏移设置'
+        
         self.single_image_width_label = QLabel(self.language_dict[self.current_language]['single_image_width'])
         stitch_layout.addWidget(self.single_image_width_label, 2, 0)
         self.single_image_width_spin = QSpinBox()
@@ -714,6 +740,8 @@ class SpriteAlignerGUI(QMainWindow):
             QMessageBox.information(self, self.language_dict[self.current_language]['success'], 
                                    self.language_dict[self.current_language]['success_imported'].format(len(file_paths)))
             self.stitch_save_btn.setEnabled(True)
+            self.export_offset_btn.setEnabled(True)
+            self.import_offset_btn.setEnabled(True)
             
             # 启用相关控件
             if len(file_paths) > 0:
@@ -842,6 +870,8 @@ class SpriteAlignerGUI(QMainWindow):
                 self.move_up_btn.setEnabled(False)
                 self.move_down_btn.setEnabled(False)
                 self.stitch_save_btn.setEnabled(False)
+                self.export_offset_btn.setEnabled(False)
+                self.import_offset_btn.setEnabled(False)
                 # 禁用缩放控件
                 self.zoom_slider.setEnabled(False)
                 self.zoom_in_btn.setEnabled(False)
@@ -1537,6 +1567,80 @@ class SpriteAlignerGUI(QMainWindow):
                     QMessageBox.information(self, "成功", f"拼接结果已保存到：{file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"保存失败：{str(e)}")
+    
+    def export_offset_settings(self):
+        """导出图片偏移设置到文件"""
+        if not self.images_data:
+            QMessageBox.warning(self, "警告", "没有图片数据可以导出")
+            return
+        
+        try:
+            # 收集所有图片的偏移数据
+            offset_data = []
+            for img_data in self.images_data:
+                offset_info = {
+                    'file_path': img_data['file_path'],
+                    'filename': os.path.basename(img_data['file_path']),
+                    'offset_x': img_data['offset_x'],
+                    'offset_y': img_data['offset_y']
+                }
+                offset_data.append(offset_info)
+            
+            # 打开文件保存对话框
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "导出偏移设置", ".", "JSON Files (*.json);;All Files (*)"
+            )
+            
+            if file_path:
+                # 将偏移数据保存到JSON文件
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(offset_data, f, ensure_ascii=False, indent=4)
+                
+                QMessageBox.information(self, "成功", f"偏移设置已导出到：{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导出失败：{str(e)}")
+    
+    def import_offset_settings(self):
+        """从文件导入图片偏移设置"""
+        if not self.images_data:
+            QMessageBox.warning(self, "警告", "请先导入图片")
+            return
+        
+        try:
+            # 打开文件选择对话框
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "导入偏移设置", ".", "JSON Files (*.json);;All Files (*)"
+            )
+            
+            if file_path:
+                # 从JSON文件加载偏移数据
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    offset_data = json.load(f)
+                
+                # 应用偏移数据到图片
+                applied_count = 0
+                for offset_info in offset_data:
+                    # 查找对应的图片
+                    for img_data in self.images_data:
+                        if os.path.basename(img_data['file_path']) == offset_info['filename']:
+                            # 应用偏移量
+                            img_data['offset_x'] = offset_info['offset_x']
+                            img_data['offset_y'] = offset_info['offset_y']
+                            applied_count += 1
+                            break
+                
+                # 更新当前选中图片的偏移控件值
+                if 0 <= self.selected_index < len(self.images_data):
+                    current_img = self.images_data[self.selected_index]
+                    self.x_spin.setValue(current_img['offset_x'])
+                    self.y_spin.setValue(current_img['offset_y'])
+                
+                # 更新工作区显示
+                self.update_workspace()
+                
+                QMessageBox.information(self, "成功", f"已应用 {applied_count} 个偏移设置")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导入失败：{str(e)}")
     
     def show_stitch_preview(self, stitch_img):
         """显示拼接结果预览"""
