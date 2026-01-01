@@ -101,7 +101,9 @@ class SpriteAlignerGUI(QMainWindow):
                     'top_align': '上对齐',
                     'bottom_align': '下对齐',
                     'center_align': '中心对齐',
-                    'no_image_selected': '请导入图片'
+                    'no_image_selected': '请导入图片',
+                    'single_image_width': '单个图片宽度:',
+                    'single_image_height': '单个图片高度:'
                 },
                 'en_US': {
                     'window_title': 'Sprite Aligner',
@@ -157,7 +159,9 @@ class SpriteAlignerGUI(QMainWindow):
                     'top_align': 'Top Align',
                     'bottom_align': 'Bottom Align',
                     'center_align': 'Center Align',
-                    'no_image_selected': 'Please import images'
+                    'no_image_selected': 'Please import images',
+                    'single_image_width': 'Single Image Width:',
+                    'single_image_height': 'Single Image Height:'
                 }
             }
         
@@ -219,6 +223,15 @@ class SpriteAlignerGUI(QMainWindow):
         self.rows_label.setText(self.language_dict[lang]['rows'])
         self.h_spacing_label.setText(self.language_dict[lang]['horizontal_spacing'])
         self.v_spacing_label.setText(self.language_dict[lang]['vertical_spacing'])
+        
+        # 检查语言字典中是否包含单个图片大小相关的键，如果没有，添加默认值
+        if 'single_image_width' not in self.language_dict[lang]:
+            self.language_dict[lang]['single_image_width'] = '单个图片宽度:' if lang == 'zh_CN' else 'Single Image Width:'
+        if 'single_image_height' not in self.language_dict[lang]:
+            self.language_dict[lang]['single_image_height'] = '单个图片高度:' if lang == 'zh_CN' else 'Single Image Height:'
+        
+        self.single_image_width_label.setText(self.language_dict[lang]['single_image_width'])
+        self.single_image_height_label.setText(self.language_dict[lang]['single_image_height'])
         
         # 更新复选框文本
         
@@ -582,7 +595,7 @@ class SpriteAlignerGUI(QMainWindow):
         self.stitch_group = QGroupBox(self.language_dict[self.current_language]['stitch_settings'])
         stitch_layout = QGridLayout(self.stitch_group)
         # 限制拼接设置区域的高度
-        self.stitch_group.setMaximumHeight(120)
+        self.stitch_group.setMaximumHeight(160)
         
         # 行列数设置
         self.columns_label = QLabel(self.language_dict[self.current_language]['columns'])
@@ -613,6 +626,26 @@ class SpriteAlignerGUI(QMainWindow):
         self.v_spacing_spin.setRange(0, 100)
         self.v_spacing_spin.setValue(0)
         stitch_layout.addWidget(self.v_spacing_spin, 1, 3)
+        
+        # 单个图片大小设置
+        # 首先检查语言字典中是否包含单个图片宽度和高度的键
+        if 'single_image_width' not in self.language_dict[self.current_language]:
+            self.language_dict[self.current_language]['single_image_width'] = '单个图片宽度:'
+            self.language_dict[self.current_language]['single_image_height'] = '单个图片高度:'
+        
+        self.single_image_width_label = QLabel(self.language_dict[self.current_language]['single_image_width'])
+        stitch_layout.addWidget(self.single_image_width_label, 2, 0)
+        self.single_image_width_spin = QSpinBox()
+        self.single_image_width_spin.setRange(0, 4096)
+        self.single_image_width_spin.setValue(0)
+        stitch_layout.addWidget(self.single_image_width_spin, 2, 1)
+        
+        self.single_image_height_label = QLabel(self.language_dict[self.current_language]['single_image_height'])
+        stitch_layout.addWidget(self.single_image_height_label, 2, 2)
+        self.single_image_height_spin = QSpinBox()
+        self.single_image_height_spin.setRange(0, 4096)
+        self.single_image_height_spin.setValue(0)
+        stitch_layout.addWidget(self.single_image_height_spin, 2, 3)
         
         # 底部按钮区域
         button_layout = QHBoxLayout()
@@ -1334,21 +1367,43 @@ class SpriteAlignerGUI(QMainWindow):
             h_spacing = self.h_spacing_spin.value()
             v_spacing = self.v_spacing_spin.value()
             
+            # 获取用户指定的单个图片大小（如果有）
+            single_width = self.single_image_width_spin.value()
+            single_height = self.single_image_height_spin.value()
+            
             # 1. 首先计算所有图片的原始尺寸和最大尺寸
             all_images = []
-            max_width = 0
-            max_height = 0
             
+            # 如果用户指定了单个图片大小，使用指定大小作为单元格大小
+            if single_width > 0 and single_height > 0:
+                cell_width = single_width + h_spacing
+                cell_height = single_height + v_spacing
+            else:
+                # 否则，计算所有图片的最大原始尺寸作为单元格大小
+                max_width = 0
+                max_height = 0
+                for img_data in self.images_data:
+                    with Image.open(img_data['file_path']) as img:
+                        orig_width, orig_height = img.size
+                        max_width = max(max_width, orig_width)
+                        max_height = max(max_height, orig_height)
+                
+                cell_width = max_width + h_spacing
+                cell_height = max_height + v_spacing
+            
+            # 收集所有图片数据
             for img_data in self.images_data:
                 with Image.open(img_data['file_path']) as img:
-                    width, height = img.size
-                    all_images.append((img_data, width, height))
-                    max_width = max(max_width, width)
-                    max_height = max(max_height, height)
+                    orig_width, orig_height = img.size
+                    all_images.append((img_data, orig_width, orig_height))
             
-            # 2. 计算每个单元格的基本尺寸（包含间距）
-            cell_width = max_width + h_spacing
-            cell_height = max_height + v_spacing
+            # 确定单元格的基准尺寸（不包含间距）
+            if single_width > 0 and single_height > 0:
+                base_cell_width = single_width
+                base_cell_height = single_height
+            else:
+                base_cell_width = max_width
+                base_cell_height = max_height
             
             # 3. 计算所有图片在拼接图中的实际位置和尺寸
             # 我们需要找到整个拼接图的最小和最大坐标，以确定最终尺寸
@@ -1359,7 +1414,7 @@ class SpriteAlignerGUI(QMainWindow):
             
             # 先收集所有图片的位置信息
             image_positions = []
-            for i, (img_data, width, height) in enumerate(all_images):
+            for i, (img_data, orig_width, orig_height) in enumerate(all_images):
                 if i >= cols * rows:
                     break
                 
@@ -1375,17 +1430,28 @@ class SpriteAlignerGUI(QMainWindow):
                 offset_x = img_data['offset_x']
                 offset_y = img_data['offset_y']
                 
-                # 计算图片中心点在单元格中的位置
-                # 默认情况下，图片中心点对齐到单元格中心点
-                # 然后加上用户调整的偏移量
-                center_x = cell_x + max_width // 2 + offset_x
-                center_y = cell_y + max_height // 2 + offset_y
+                # 计算单元格中心位置
+                cell_center_x = cell_x + base_cell_width // 2
+                cell_center_y = cell_y + base_cell_height // 2
+                
+                # 计算图片中心点在单元格中的位置（考虑偏移量）
+                center_x = cell_center_x + offset_x
+                center_y = cell_center_y + offset_y
                 
                 # 计算图片左上角和右下角坐标
-                img_left = center_x - width // 2
-                img_top = center_y - height // 2
-                img_right = center_x + width // 2
-                img_bottom = center_y + height // 2
+                # 如果用户指定了单个图片大小，使用指定大小，否则使用原始图片大小
+                if single_width > 0 and single_height > 0:
+                    # 使用用户指定的大小计算坐标
+                    img_left = center_x - single_width // 2
+                    img_top = center_y - single_height // 2
+                    img_right = center_x + single_width // 2
+                    img_bottom = center_y + single_height // 2
+                else:
+                    # 使用原始图片大小计算坐标
+                    img_left = center_x - orig_width // 2
+                    img_top = center_y - orig_height // 2
+                    img_right = center_x + orig_width // 2
+                    img_bottom = center_y + orig_height // 2
                 
                 # 更新全局坐标范围
                 min_x = min(min_x, img_left)
@@ -1396,16 +1462,20 @@ class SpriteAlignerGUI(QMainWindow):
                 # 保存图片位置信息
                 image_positions.append({
                     'img_data': img_data,
-                    'width': width,
-                    'height': height,
+                    'orig_width': orig_width,
+                    'orig_height': orig_height,
                     'left': img_left,
-                    'top': img_top
+                    'top': img_top,
+                    'center_x': center_x,
+                    'center_y': center_y
                 })
             
             # 4. 计算最终拼接图的尺寸
-            # 确保尺寸至少为0
+            # 使用自动计算的尺寸，基于单个图片大小和行列数
             total_width = max(int(max_x - min_x), 0)
             total_height = max(int(max_y - min_y), 0)
+            offset_adjust_x = -min_x
+            offset_adjust_y = -min_y
             
             # 5. 创建新的空白图片
             stitch_img = Image.new('RGBA', (total_width, total_height), (0, 0, 0, 0))
@@ -1413,16 +1483,32 @@ class SpriteAlignerGUI(QMainWindow):
             # 6. 粘贴所有图片到正确位置
             for pos in image_positions:
                 img_data = pos['img_data']
-                width = pos['width']
-                height = pos['height']
+                orig_width = pos['orig_width']
+                orig_height = pos['orig_height']
                 
-                # 计算调整后的粘贴位置（减去min_x和min_y，确保图片在画布内）
-                paste_x = int(pos['left'] - min_x)
-                paste_y = int(pos['top'] - min_y)
+                # 计算调整后的粘贴位置
+                paste_x = int(pos['left'] + offset_adjust_x)
+                paste_y = int(pos['top'] + offset_adjust_y)
                 
-                # 打开图片并粘贴
+                # 打开图片
                 with Image.open(img_data['file_path']) as img:
-                    stitch_img.paste(img, (paste_x, paste_y), img if img.mode == 'RGBA' else None)
+                    # 如果用户指定了单个图片大小，将图片调整到指定大小，填充透明背景
+                    if single_width > 0 and single_height > 0:
+                        # 创建指定大小的透明背景图片
+                        resized_img = Image.new('RGBA', (single_width, single_height), (0, 0, 0, 0))
+                        
+                        # 计算原始图片在透明背景中的居中位置
+                        paste_center_x = (single_width - orig_width) // 2
+                        paste_center_y = (single_height - orig_height) // 2
+                        
+                        # 将原始图片居中粘贴到透明背景上
+                        resized_img.paste(img, (paste_center_x, paste_center_y), img if img.mode == 'RGBA' else None)
+                        
+                        # 使用调整后的图片进行粘贴
+                        stitch_img.paste(resized_img, (paste_x, paste_y), resized_img)
+                    else:
+                        # 否则，直接使用原始图片进行粘贴
+                        stitch_img.paste(img, (paste_x, paste_y), img if img.mode == 'RGBA' else None)
             
             return stitch_img
             
