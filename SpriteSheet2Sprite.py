@@ -270,41 +270,6 @@ class SpriteCanvas(QLabel):
 
         painter = QPainter(self)
 
-        # 绘制检测范围框
-        for i, rect in enumerate(self.detection_areas):
-            x, y, width, height = rect
-
-            # 使用当前缩放因子计算绘制坐标
-            scaled_x = int(x * self.scale_factor)
-            scaled_y = int(y * self.scale_factor)
-            scaled_width = int(width * self.scale_factor)
-            scaled_height = int(height * self.scale_factor)
-
-            # 创建绘制的矩形
-            draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
-
-            # 设置画笔样式
-            if i == self.selected_area_index:
-                pen = QPen(QColor(255, 255, 0), 2, Qt.DashLine)
-                brush = QBrush(QColor(255, 255, 0, 20))
-            elif i == self.hover_area_index and not self.drawing_area_mode:
-                pen = QPen(QColor(0, 255, 255), 2, Qt.DashLine)
-                brush = QBrush(QColor(0, 255, 255, 20))
-            else:
-                pen = QPen(QColor(255, 0, 255), 1, Qt.DashLine)
-                brush = QBrush(QColor(255, 0, 255, 20))
-
-            painter.setPen(pen)
-            painter.setBrush(brush)
-            painter.drawRect(draw_rect)
-
-            # 绘制检测范围索引
-            painter.drawText(scaled_x + 5, scaled_y + 15, f"A{i+1}")
-
-            # 如果是选中的检测范围，绘制调整大小的控制点
-            if i == self.selected_area_index:
-                self.draw_handles(painter, rect)
-
         # 绘制精灵区域框
         for i, rect in enumerate(self.sprite_rects):
             x, y, width, height = rect
@@ -338,6 +303,41 @@ class SpriteCanvas(QLabel):
 
             # 如果是选中的选框，绘制调整大小的控制点
             if i == self.selected_rect_index:
+                self.draw_handles(painter, rect)
+
+        # 绘制检测范围框
+        for i, rect in enumerate(self.detection_areas):
+            x, y, width, height = rect
+
+            # 使用当前缩放因子计算绘制坐标
+            scaled_x = int(x * self.scale_factor)
+            scaled_y = int(y * self.scale_factor)
+            scaled_width = int(width * self.scale_factor)
+            scaled_height = int(height * self.scale_factor)
+
+            # 创建绘制的矩形
+            draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
+
+            # 设置画笔样式
+            if i == self.selected_area_index:
+                pen = QPen(QColor(255, 255, 0), 2, Qt.DashLine)
+                brush = QBrush(QColor(255, 255, 0, 20))
+            elif i == self.hover_area_index and not self.drawing_area_mode:
+                pen = QPen(QColor(0, 255, 255), 2, Qt.DashLine)
+                brush = QBrush(QColor(0, 255, 255, 20))
+            else:
+                pen = QPen(QColor(255, 0, 255), 1, Qt.DashLine)
+                brush = QBrush(QColor(255, 0, 255, 20))
+
+            painter.setPen(pen)
+            painter.setBrush(brush)
+            painter.drawRect(draw_rect)
+
+            # 绘制检测范围索引
+            painter.drawText(scaled_x + 5, scaled_y + 15, f"A{i+1}")
+
+            # 如果是选中的检测范围，绘制调整大小的控制点
+            if i == self.selected_area_index:
                 self.draw_handles(painter, rect)
 
         # 绘制正在创建的选框
@@ -394,9 +394,9 @@ class SpriteCanvas(QLabel):
                     self.set_cursor_by_direction(direction)
                     return
 
-            # 检测鼠标是否在某个检测范围内
-            hover_area_index = -1
-            for i, rect in enumerate(self.detection_areas):
+            # 检测鼠标是否在某个精灵区域内
+            hover_rect_index = -1
+            for i, rect in enumerate(self.sprite_rects):
                 x, y, width, height = rect
                 scaled_x = int(x * self.scale_factor)
                 scaled_y = int(y * self.scale_factor)
@@ -405,13 +405,13 @@ class SpriteCanvas(QLabel):
 
                 draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
                 if draw_rect.contains(mouse_pos):
-                    hover_area_index = i
+                    hover_rect_index = i
                     break
 
-            # 检测鼠标是否在某个精灵区域内
-            hover_rect_index = -1
-            if hover_area_index == -1:  # 只有不在检测范围内时才检测精灵区域
-                for i, rect in enumerate(self.sprite_rects):
+            # 检测鼠标是否在某个检测范围内
+            hover_area_index = -1
+            if hover_rect_index == -1:  # 只有不在精灵区域内时才检测检测范围
+                for i, rect in enumerate(self.detection_areas):
                     x, y, width, height = rect
                     scaled_x = int(x * self.scale_factor)
                     scaled_y = int(y * self.scale_factor)
@@ -420,7 +420,7 @@ class SpriteCanvas(QLabel):
 
                     draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
                     if draw_rect.contains(mouse_pos):
-                        hover_rect_index = i
+                        hover_area_index = i
                         break
 
             # 更新悬停状态
@@ -452,7 +452,58 @@ class SpriteCanvas(QLabel):
                 self.current_rect = QRect(self.start_pos, self.start_pos)
                 self.update()
             else:
-                # 非绘制模式下，先检测是否点击了检测范围
+                # 非绘制模式下，先检测是否点击了精灵区域
+                clicked_rect_index = -1
+                for i, rect in enumerate(self.sprite_rects):
+                    x, y, width, height = rect
+                    scaled_x = int(x * self.scale_factor)
+                    scaled_y = int(y * self.scale_factor)
+                    scaled_width = int(width * self.scale_factor)
+                    scaled_height = int(height * self.scale_factor)
+
+                    draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
+                    if draw_rect.contains(event.pos()):
+                        clicked_rect_index = i
+                        break
+
+                if clicked_rect_index != -1:
+                    # 选中精灵区域
+                    self.selected_rect_index = clicked_rect_index
+                    self.selected_area_index = -1
+                    self.hover_area_index = -1
+                    
+                    # 检查是否在调整大小的控制点上
+                    rect = self.sprite_rects[self.selected_rect_index]
+                    direction = self.get_resize_direction(event.pos(), rect)
+                    if direction != self.NONE:
+                        # 开始调整大小
+                        self.is_resizing = True
+                        self.resize_direction = direction
+                        self.resize_start_pos = event.pos()
+                        self.original_rect = QRect(
+                            int(rect[0] * self.scale_factor),
+                            int(rect[1] * self.scale_factor),
+                            int(rect[2] * self.scale_factor),
+                            int(rect[3] * self.scale_factor)
+                        )
+                    else:
+                        # 开始拖拽移动
+                        self.is_dragging = True
+                        self.drag_start_pos = event.pos()
+                        self.original_rect = QRect(
+                            int(rect[0] * self.scale_factor),
+                            int(rect[1] * self.scale_factor),
+                            int(rect[2] * self.scale_factor),
+                            int(rect[3] * self.scale_factor)
+                        )
+                    
+                    self.update()
+                    self.rect_selected.emit(self.selected_rect_index)
+                    # 发射检测范围选择信号，表示没有选中检测范围
+                    self.detection_area_selected.emit([])
+                    return
+
+                # 检测是否点击了检测范围
                 clicked_area_index = -1
                 for i, rect in enumerate(self.detection_areas):
                     x, y, width, height = rect
@@ -502,27 +553,10 @@ class SpriteCanvas(QLabel):
                     self.detection_area_selected.emit([self.selected_area_index])
                     return
 
-                # 检测是否在调整大小的控制点上
-                if self.selected_rect_index != -1:
-                    direction = self.get_resize_direction(event.pos(), self.sprite_rects[self.selected_rect_index])
-                    if direction != self.NONE:
-                        # 开始调整大小
-                        self.is_resizing = True
-                        self.resize_direction = direction
-                        self.resize_start_pos = event.pos()
-                        self.original_rect = QRect(
-                            int(self.sprite_rects[self.selected_rect_index][0] * self.scale_factor),
-                            int(self.sprite_rects[self.selected_rect_index][1] * self.scale_factor),
-                            int(self.sprite_rects[self.selected_rect_index][2] * self.scale_factor),
-                            int(self.sprite_rects[self.selected_rect_index][3] * self.scale_factor)
-                        )
-                        return
-
-                # 选中精灵区域
-                self.selected_rect_index = self.hover_rect_index
+                # 没有选中任何区域，清除选择
+                self.selected_rect_index = -1
                 self.selected_area_index = -1
-                self.rect_selected.emit(self.selected_rect_index)
-                # 发射检测范围选择信号，表示没有选中检测范围
+                self.rect_selected.emit(-1)
                 self.detection_area_selected.emit([])
                 self.update()
 
