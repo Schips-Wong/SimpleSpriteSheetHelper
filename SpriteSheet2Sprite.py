@@ -936,7 +936,7 @@ class SpriteSplitterGUI(QMainWindow):
                     'detect_sprites': '检测精灵',
                     'add_rect': '添加选框',
                     'remove_rect': '删除选中边框',
-                    'start_split': '开始分割',
+                    'start_split': '导出分割结果',
                     'control_options': '控制选项',
                     'auto_detection_threshold': '自动检测阈值:',
                     'image_path': '图片路径:',
@@ -1003,20 +1003,12 @@ class SpriteSplitterGUI(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # 主布局
-        main_layout = QVBoxLayout(central_widget)
+        # 主布局 - 水平布局，左侧图片区，右侧按钮控制区
+        main_layout = QHBoxLayout(central_widget)
 
-        # 语言选择布局
-        language_layout = QHBoxLayout()
-        language_layout.addStretch()
-        self.language_label = QLabel(self.language_dict[self.current_language]['language'])
-        language_layout.addWidget(self.language_label)
-        self.language_combo = QComboBox()
-        self.language_combo.addItem("中文", "zh_CN")
-        self.language_combo.addItem("English", "en_US")
-        self.language_combo.currentIndexChanged.connect(self.switch_language)
-        language_layout.addWidget(self.language_combo)
-        main_layout.addLayout(language_layout)
+        # 左侧：图片预览区域（占据3/4宽度）
+        left_layout = QVBoxLayout()
+        main_layout.addLayout(left_layout, 3)
 
         # 预览区域
         self.preview_group = QGroupBox(self.language_dict[self.current_language]['sprite_preview'])
@@ -1031,18 +1023,40 @@ class SpriteSplitterGUI(QMainWindow):
         scroll_area.setWidget(self.canvas)
         preview_layout.addWidget(scroll_area)
 
-        # 主要功能按钮区域
-        main_buttons_layout = QHBoxLayout()
+        left_layout.addWidget(self.preview_group, 1)
 
+        # 右侧：按钮和控制区域（占据1/4宽度）
+        right_layout = QVBoxLayout()
+        main_layout.addLayout(right_layout, 1)
+
+        # 语言选择布局
+        language_layout = QHBoxLayout()
+        language_layout.addStretch()
+        self.language_label = QLabel(self.language_dict[self.current_language]['language'])
+        language_layout.addWidget(self.language_label)
+        self.language_combo = QComboBox()
+        self.language_combo.addItem("中文", "zh_CN")
+        self.language_combo.addItem("English", "en_US")
+        self.language_combo.currentIndexChanged.connect(self.switch_language)
+        language_layout.addWidget(self.language_combo)
+        right_layout.addLayout(language_layout)
+
+        # 主要功能按钮区域 - 垂直布局
+        main_buttons_layout = QVBoxLayout()
+
+        # 选择图片按钮
         self.select_image_btn = QPushButton(self.language_dict[self.current_language]['select_image'])
         self.select_image_btn.clicked.connect(self.select_image)
+        self.nobody_label_1 = QLabel("")
         main_buttons_layout.addWidget(self.select_image_btn)
+        main_buttons_layout.addWidget(self.nobody_label_1)
 
 
         # 检测范围管理按钮
         self.add_detection_area_btn = QPushButton(self.language_dict[self.current_language]['add_detection_area'])
         self.add_detection_area_btn.clicked.connect(self.toggle_drawing_area_mode)
         self.add_detection_area_btn.setCheckable(True)  # 可切换状态
+        self.add_detection_area_btn.setEnabled(False)  # 初始禁用
         main_buttons_layout.addWidget(self.add_detection_area_btn)
 
         self.remove_detection_area_btn = QPushButton(self.language_dict[self.current_language]['remove_detection_area'])
@@ -1053,6 +1067,9 @@ class SpriteSplitterGUI(QMainWindow):
         self.clear_detection_areas_btn = QPushButton(self.language_dict[self.current_language]['clear_detection_areas'])
         self.clear_detection_areas_btn.clicked.connect(self.clear_detection_areas)
         main_buttons_layout.addWidget(self.clear_detection_areas_btn)
+
+        self.nobody_label_2 = QLabel("")
+        main_buttons_layout.addWidget(self.nobody_label_2)
 
         self.detect_sprites_btn = QPushButton(self.language_dict[self.current_language]['detect_sprites'])
         self.detect_sprites_btn.clicked.connect(self.detect_sprites)
@@ -1071,10 +1088,16 @@ class SpriteSplitterGUI(QMainWindow):
         self.clear_all_rects_btn = QPushButton(self.language_dict[self.current_language]['clear_all_rects'])
         self.clear_all_rects_btn.clicked.connect(self.clear_all_rects)
         main_buttons_layout.addWidget(self.clear_all_rects_btn)
+        
+        self.nobody_label_3 = QLabel("")
+        main_buttons_layout.addWidget(self.nobody_label_3)
 
         self.start_split_btn = QPushButton(self.language_dict[self.current_language]['start_split'])
         self.start_split_btn.clicked.connect(self.start_split)
         main_buttons_layout.addWidget(self.start_split_btn)
+
+
+
 
         # 控制区域
         self.control_group = QGroupBox(self.language_dict[self.current_language]['control_options'])
@@ -1150,10 +1173,10 @@ class SpriteSplitterGUI(QMainWindow):
         self.progress_bar.setVisible(False)
         control_layout.addWidget(self.progress_bar)
 
-        # 将预览区域、主要功能按钮区域和控制区域添加到主布局
-        main_layout.addWidget(self.preview_group, 1)
-        main_layout.addLayout(main_buttons_layout)
-        main_layout.addWidget(self.control_group)
+        # 将按钮布局和控制区域添加到右侧布局
+        right_layout.addLayout(main_buttons_layout)
+        right_layout.addWidget(self.control_group)
+        right_layout.addStretch()  # 底部拉伸，使控件顶部对齐
 
         # 连接信号槽
         self.scale_slider.valueChanged.connect(self.on_scale_changed)
@@ -1172,6 +1195,7 @@ class SpriteSplitterGUI(QMainWindow):
             self.image_path = file_path
             self.image_path_label.setText(file_path)
             self.canvas.set_image(file_path)
+            self.add_detection_area_btn.setEnabled(True)
 
     def browse_output_dir(self):
         """浏览输出目录"""
@@ -1225,7 +1249,7 @@ class SpriteSplitterGUI(QMainWindow):
 
 
     def start_split(self):
-        """开始分割精灵"""
+        """导出分割结果精灵"""
         if not self.image_path:
             QMessageBox.warning(self, self.language_dict[self.current_language]['warning'],
                                 self.language_dict[self.current_language]['please_select_image_first'])
