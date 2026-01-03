@@ -1,15 +1,536 @@
 import sys
 import os
 import json
+from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QListWidget, QFileDialog, QSpinBox, 
     QGroupBox, QMessageBox, QGridLayout, QScrollArea,
-    QSplitter, QSlider, QCheckBox, QComboBox
+    QSplitter, QSlider, QCheckBox, QComboBox, QListView, QTreeView,
+    QDialog, QListWidgetItem, QProgressBar, QTabWidget, QTextEdit,
+    QAbstractItemView, QTreeWidget, QTreeWidgetItem, QLineEdit
 )
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QCursor
 from PyQt5.QtCore import Qt, QPoint, QRect
 from PIL import Image
+
+
+class AdvancedImageFileDialog(QDialog):
+    """高级图片文件选择对话框，支持多目录选择"""
+    
+    def __init__(self, parent=None, language_dict=None, current_language='zh_CN'):
+        super().__init__(parent)
+        self.selected_directories = []
+        self.language_dict = language_dict or self.load_default_language_dict()
+        self.current_language = current_language
+        self.setup_ui()
+    
+    def load_default_language_dict(self):
+        """加载默认语言字典"""
+        return {
+            'zh_CN': {
+                'select_image_directories': '选择图片目录',
+                'select_containing_images': '选择包含图片的目录:',
+                'current_path': '当前路径:',
+                'enter_path_or_browse': '输入目录路径或点击浏览...',
+                'browse': '浏览',
+                'parent_directory': '上级目录',
+                'program_directory': '程序目录',
+                'directory_tree': '目录树:',
+                'directory': '目录',
+                'refresh': '刷新',
+                'expand_all': '展开全部',
+                'collapse_all': '折叠全部',
+                'selected_directories': '已选目录:',
+                'remove': '移除',
+                'clear': '清空',
+                'file_type': '文件类型:',
+                'images_in_directory': '目录中的图片文件:',
+                'selected_directories_count': '已选择 {0} 个目录，共 {1} 个文件',
+                'ok': '确定',
+                'cancel': '取消',
+                'click_to_expand': '点击展开...',
+                'no_access_permission': '无访问权限',
+                'load_failed': '加载失败: {0}',
+                'error': '错误',
+                'path_not_exist': '路径不存在或不是目录',
+                'select_directory': '选择目录',
+                'cannot_navigate': '无法导航到目录: {0}',
+                'all_images': '所有图片 (*.png *.jpg *.jpeg *.bmp *.gif)',
+                'png_images': 'PNG 图片 (*.png)',
+                'jpeg_images': 'JPEG 图片 (*.jpg *.jpeg)',
+                'bmp_images': 'BMP 图片 (*.bmp)',
+                'gif_images': 'GIF 图片 (*.gif)',
+                'include_subdirectories': '包含子目录'
+            },
+            'en_US': {
+                'select_image_directories': 'Select Image Directories',
+                'select_containing_images': 'Select directories containing images:',
+                'current_path': 'Current Path:',
+                'enter_path_or_browse': 'Enter directory path or click browse...',
+                'browse': 'Browse',
+                'parent_directory': 'Parent Directory',
+                'program_directory': 'Program Directory',
+                'directory_tree': 'Directory Tree:',
+                'directory': 'Directory',
+                'refresh': 'Refresh',
+                'expand_all': 'Expand All',
+                'collapse_all': 'Collapse All',
+                'selected_directories': 'Selected Directories:',
+                'remove': 'Remove',
+                'clear': 'Clear',
+                'file_type': 'File Type:',
+                'images_in_directory': 'Images in directory:',
+                'selected_directories_count': 'Selected {0} directories, total {1} files',
+                'ok': 'OK',
+                'cancel': 'Cancel',
+                'click_to_expand': 'Click to expand...',
+                'no_access_permission': 'No access permission',
+                'load_failed': 'Load failed: {0}',
+                'error': 'Error',
+                'path_not_exist': 'Path does not exist or is not a directory',
+                'select_directory': 'Select Directory',
+                'cannot_navigate': 'Cannot navigate to directory: {0}',
+                'all_images': 'All images (*.png *.jpg *.jpeg *.bmp *.gif)',
+                'png_images': 'PNG images (*.png)',
+                'jpeg_images': 'JPEG images (*.jpg *.jpeg)',
+                'bmp_images': 'BMP images (*.bmp)',
+                'gif_images': 'GIF images (*.gif)',
+                'include_subdirectories': 'Include subdirectories'
+            }
+        }
+
+    def setup_ui(self):
+        """设置界面"""
+        self.setWindowTitle(self.language_dict[self.current_language]['select_image_directories'])
+        self.setGeometry(200, 100, 1000, 800)
+        
+        layout = QVBoxLayout(self)
+        
+        # 目录选择区域
+        directory_layout = QVBoxLayout()
+        directory_layout.addWidget(QLabel(self.language_dict[self.current_language]['select_containing_images']))
+        
+        # 地址栏
+        address_layout = QHBoxLayout()
+        address_layout.addWidget(QLabel(self.language_dict[self.current_language]['current_path']))
+        
+        self.address_bar = QLineEdit()
+        self.address_bar.setPlaceholderText(self.language_dict[self.current_language]['enter_path_or_browse'])
+        self.address_bar.returnPressed.connect(self.navigate_to_address)
+        address_layout.addWidget(self.address_bar)
+        
+        self.browse_btn = QPushButton(self.language_dict[self.current_language]['browse'])
+        self.browse_btn.clicked.connect(self.browse_directory)
+        address_layout.addWidget(self.browse_btn)
+        
+        self.up_btn = QPushButton(self.language_dict[self.current_language]['parent_directory'])
+        self.up_btn.clicked.connect(self.navigate_up)
+        address_layout.addWidget(self.up_btn)
+        
+        self.home_btn = QPushButton(self.language_dict[self.current_language]['program_directory'])
+        self.home_btn.clicked.connect(self.navigate_to_program_dir)
+        address_layout.addWidget(self.home_btn)
+        
+        directory_layout.addLayout(address_layout)
+        
+        # 目录浏览和选择区域（使用分割器）
+        splitter = QSplitter(Qt.Horizontal)
+        
+        # 左侧：目录树区域
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.addWidget(QLabel(self.language_dict[self.current_language]['directory_tree']))
+        
+        self.directory_tree = QTreeWidget()
+        self.directory_tree.setHeaderLabels([self.language_dict[self.current_language]['directory']])
+        self.directory_tree.setColumnWidth(0, 300)
+        self.directory_tree.setColumnWidth(1, 80)
+        self.directory_tree.itemChanged.connect(self.on_item_changed)
+        left_layout.addWidget(self.directory_tree)
+        
+        # 目录操作按钮
+        tree_buttons_layout = QHBoxLayout()
+        self.refresh_btn = QPushButton(self.language_dict[self.current_language]['refresh'])
+        self.refresh_btn.clicked.connect(self.refresh_directory_tree)
+        tree_buttons_layout.addWidget(self.refresh_btn)
+        
+        self.expand_all_btn = QPushButton(self.language_dict[self.current_language]['expand_all'])
+        self.expand_all_btn.clicked.connect(self.directory_tree.expandAll)
+        tree_buttons_layout.addWidget(self.expand_all_btn)
+        
+        self.collapse_all_btn = QPushButton(self.language_dict[self.current_language]['collapse_all'])
+        self.collapse_all_btn.clicked.connect(self.directory_tree.collapseAll)
+        tree_buttons_layout.addWidget(self.collapse_all_btn)
+        
+        left_layout.addLayout(tree_buttons_layout)
+        
+        # 右侧：已选目录列表区域
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.addWidget(QLabel(self.language_dict[self.current_language]['selected_directories']))
+        
+        self.selected_list = QListWidget()
+        right_layout.addWidget(self.selected_list)
+        
+        # 已选目录操作按钮
+        selected_buttons_layout = QHBoxLayout()
+        self.remove_btn = QPushButton(self.language_dict[self.current_language]['remove'])
+        self.remove_btn.clicked.connect(self.remove_selected)
+        selected_buttons_layout.addWidget(self.remove_btn)
+        
+        self.clear_btn = QPushButton(self.language_dict[self.current_language]['clear'])
+        self.clear_btn.clicked.connect(self.clear_selected)
+        selected_buttons_layout.addWidget(self.clear_btn)
+        
+        right_layout.addLayout(selected_buttons_layout)
+        
+        # 添加分割器部件
+        splitter.addWidget(left_widget)
+        splitter.addWidget(right_widget)
+        splitter.setStretchFactor(0, 2)  # 目录树占2/4
+        splitter.setStretchFactor(1, 2)  # 已选列表占2/4
+        
+        directory_layout.addWidget(splitter)
+        layout.addLayout(directory_layout)
+        
+        # 文件类型过滤器
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel(self.language_dict[self.current_language]['file_type']))
+        
+        self.filter_combo = QComboBox()
+        self.filter_combo.addItems([
+            self.language_dict[self.current_language]['all_images'],
+            self.language_dict[self.current_language]['png_images'],
+            self.language_dict[self.current_language]['jpeg_images'],
+            self.language_dict[self.current_language]['bmp_images'],
+            self.language_dict[self.current_language]['gif_images']
+        ])
+        filter_layout.addWidget(self.filter_combo)
+        
+        filter_layout.addStretch()
+        
+        # 包含子目录选项
+        self.include_subdirs_check = QCheckBox(self.language_dict[self.current_language]['include_subdirectories'])
+        self.include_subdirs_check.setChecked(False)
+        filter_layout.addWidget(self.include_subdirs_check)
+        
+        layout.addLayout(filter_layout)
+        
+        # 文件预览区域（使用分割器）
+        main_splitter = QSplitter(Qt.Vertical)
+        
+        # 上部：目录浏览区域
+        top_widget = QWidget()
+        top_layout = QVBoxLayout(top_widget)
+        top_layout.addLayout(directory_layout)
+        
+        # 下部：文件预览区域
+        bottom_widget = QWidget()
+        bottom_layout = QVBoxLayout(bottom_widget)
+        bottom_layout.addWidget(QLabel(self.language_dict[self.current_language]['images_in_directory']))
+        
+        self.file_list = QListWidget()
+        bottom_layout.addWidget(self.file_list)
+        
+        # 文件统计信息
+        self.file_info_label = QLabel(self.language_dict[self.current_language]['selected_directories_count'].format(0, 0))
+        bottom_layout.addWidget(self.file_info_label)
+        
+        # 添加分割器部件
+        main_splitter.addWidget(top_widget)
+        main_splitter.addWidget(bottom_widget)
+        main_splitter.setStretchFactor(0, 3)  # 目录浏览区域占3/4
+        main_splitter.setStretchFactor(1, 1)  # 文件预览区域占1/4
+        
+        layout.addWidget(main_splitter)
+        
+        # 底部按钮
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        self.ok_btn = QPushButton(self.language_dict[self.current_language]['ok'])
+        self.ok_btn.clicked.connect(self.accept)
+        button_layout.addWidget(self.ok_btn)
+        
+        self.cancel_btn = QPushButton(self.language_dict[self.current_language]['cancel'])
+        self.cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # 初始化目录树
+        self.populate_directory_tree()
+        
+        # 默认定位到程序所在位置
+        self.navigate_to_program_dir()
+    
+    def populate_directory_tree(self, initial_path=None):
+        """填充目录树（懒加载模式）"""
+        self.directory_tree.clear()
+        
+        # 连接展开事件
+        self.directory_tree.itemExpanded.connect(self.on_item_expanded)
+        self.directory_tree.itemCollapsed.connect(self.on_item_collapsed)
+        
+        if initial_path:
+            # 使用指定路径作为根节点
+            root_item = QTreeWidgetItem(self.directory_tree)
+            root_item.setText(0, initial_path)
+            root_item.setFlags(root_item.flags() | Qt.ItemIsUserCheckable)
+            root_item.setCheckState(0, Qt.Unchecked)
+            
+            # 添加子目录占位符（懒加载）
+            child_item = QTreeWidgetItem(root_item)
+            child_item.setText(0, self.language_dict[self.current_language]['click_to_expand'])
+            child_item.setFlags(child_item.flags() & ~Qt.ItemIsUserCheckable)
+            
+            # 展开根节点
+            self.directory_tree.expandItem(root_item)
+        else:
+            # 获取驱动器列表（Windows）
+            import string
+            drives = [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\")]
+            
+            for drive in drives:
+                drive_item = QTreeWidgetItem(self.directory_tree)
+                drive_item.setText(0, drive)
+                drive_item.setFlags(drive_item.flags() | Qt.ItemIsUserCheckable)
+                drive_item.setCheckState(0, Qt.Unchecked)
+                
+                # 添加子目录占位符（懒加载）
+                child_item = QTreeWidgetItem(drive_item)
+                child_item.setText(0, self.language_dict[self.current_language]['click_to_expand'])
+                child_item.setFlags(child_item.flags() & ~Qt.ItemIsUserCheckable)
+    
+    def on_item_expanded(self, item):
+        """目录项展开时的处理（懒加载子目录）"""
+        # 如果当前项有子项且是占位符，则加载真实子目录
+        if item.childCount() == 1 and item.child(0).text(0) == self.language_dict[self.current_language]['click_to_expand']:
+            # 移除占位符
+            item.removeChild(item.child(0))
+            
+            # 加载子目录
+            self.load_subdirectories(item)
+    
+    def on_item_collapsed(self, item):
+        """目录项折叠时的处理（可选：清理子项以节省内存）"""
+        # 可以保留子目录，或者清理以节省内存
+        # 这里选择保留，因为重新加载可能耗时
+        pass
+    
+    def load_subdirectories(self, parent_item):
+        """加载指定目录的子目录"""
+        directory_path = self.get_item_full_path(parent_item)
+        
+        try:
+            # 获取子目录列表
+            subdirs = []
+            for entry in os.listdir(directory_path):
+                entry_path = os.path.join(directory_path, entry)
+                if os.path.isdir(entry_path):
+                    subdirs.append(entry)
+            
+            # 按名称排序
+            subdirs.sort()
+            
+            # 添加子目录项
+            for subdir in subdirs:
+                subdir_path = os.path.join(directory_path, subdir)
+                subdir_item = QTreeWidgetItem(parent_item)
+                subdir_item.setText(0, subdir)  # 只显示目录名
+                subdir_item.setData(0, Qt.UserRole, subdir_path)  # 存储完整路径
+                subdir_item.setFlags(subdir_item.flags() | Qt.ItemIsUserCheckable)
+                subdir_item.setCheckState(0, Qt.Unchecked)
+                
+                # 添加子目录占位符（懒加载）
+                child_item = QTreeWidgetItem(subdir_item)
+                child_item.setText(0, self.language_dict[self.current_language]['click_to_expand'])
+                child_item.setFlags(child_item.flags() & ~Qt.ItemIsUserCheckable)
+                
+        except PermissionError:
+            # 无权限访问的目录
+            error_item = QTreeWidgetItem(parent_item)
+            error_item.setText(0, self.language_dict[self.current_language]['no_access_permission'])
+            error_item.setFlags(error_item.flags() & ~Qt.ItemIsUserCheckable)
+        except Exception as e:
+            # 其他错误
+            error_item = QTreeWidgetItem(parent_item)
+            error_item.setText(0, self.language_dict[self.current_language]['load_failed'].format(str(e)))
+            error_item.setFlags(error_item.flags() & ~Qt.ItemIsUserCheckable)
+    
+    def get_item_full_path(self, item):
+        """获取目录项的完整路径"""
+        # 如果项存储了完整路径数据，则使用该数据
+        full_path = item.data(0, Qt.UserRole)
+        if full_path:
+            return full_path
+        
+        # 否则使用显示的文本（根节点）
+        return item.text(0)
+    
+    def on_item_changed(self, item, column):
+        """目录树项状态改变时的处理"""
+        if column == 0:  # 只处理第一列
+            directory_path = self.get_item_full_path(item)
+            
+            if item.checkState(0) == Qt.Checked:
+                # 添加目录到已选列表
+                if directory_path not in self.selected_directories:
+                    self.selected_directories.append(directory_path)
+                    self.selected_list.addItem(directory_path)
+                    self.update_file_list()
+            else:
+                # 从已选列表中移除目录
+                if directory_path in self.selected_directories:
+                    self.selected_directories.remove(directory_path)
+                    # 从列表控件中移除
+                    for i in range(self.selected_list.count()):
+                        if self.selected_list.item(i).text() == directory_path:
+                            self.selected_list.takeItem(i)
+                            break
+                    self.update_file_list()
+    
+    def refresh_directory_tree(self):
+        """刷新目录树"""
+        self.populate_directory_tree()
+    
+    def remove_selected(self):
+        """移除选中的目录"""
+        current_item = self.selected_list.currentItem()
+        if current_item:
+            directory_path = current_item.text()
+            if directory_path in self.selected_directories:
+                self.selected_directories.remove(directory_path)
+                self.selected_list.takeItem(self.selected_list.row(current_item))
+                
+                # 更新目录树的勾选状态
+                self.update_tree_check_state(directory_path, False)
+                self.update_file_list()
+    
+    def clear_selected(self):
+        """清空已选目录"""
+        self.selected_directories.clear()
+        self.selected_list.clear()
+        
+        # 更新目录树的勾选状态
+        self.update_all_tree_check_states(False)
+        self.update_file_list()
+    
+    def update_tree_check_state(self, directory_path, checked):
+        """更新目录树中指定目录的勾选状态"""
+        # 遍历所有目录项
+        def update_item(item):
+            if self.get_item_full_path(item) == directory_path:
+                item.setCheckState(0, Qt.Checked if checked else Qt.Unchecked)
+                return True
+            
+            # 递归检查子项
+            for i in range(item.childCount()):
+                if update_item(item.child(i)):
+                    return True
+            return False
+        
+        for i in range(self.directory_tree.topLevelItemCount()):
+            if update_item(self.directory_tree.topLevelItem(i)):
+                break
+    
+    def update_all_tree_check_states(self, checked):
+        """更新目录树中所有目录的勾选状态"""
+        # 递归更新所有项
+        def update_all_items(item):
+            item.setCheckState(0, Qt.Checked if checked else Qt.Unchecked)
+            for i in range(item.childCount()):
+                update_all_items(item.child(i))
+        
+        for i in range(self.directory_tree.topLevelItemCount()):
+            update_all_items(self.directory_tree.topLevelItem(i))
+    
+    def update_file_list(self):
+        """更新文件列表"""
+        self.file_list.clear()
+        
+        if not self.selected_directories:
+            self.file_info_label.setText("已选择 0 个目录，共 0 个文件")
+            return
+        
+        # 收集所有图片文件
+        all_files = []
+        for directory in self.selected_directories:
+            if self.include_subdirs_check.isChecked():
+                # 包含子目录
+                for root, dirs, files in os.walk(directory):
+                    for file in files:
+                        if self.is_image_file(file):
+                            all_files.append(os.path.join(root, file))
+            else:
+                # 仅当前目录
+                try:
+                    files = os.listdir(directory)
+                    for file in files:
+                        file_path = os.path.join(directory, file)
+                        if os.path.isfile(file_path) and self.is_image_file(file):
+                            all_files.append(file_path)
+                except PermissionError:
+                    continue
+        
+        # 添加到文件列表
+        for file_path in all_files:
+            self.file_list.addItem(os.path.basename(file_path))
+        
+        self.file_info_label.setText(f"已选择 {len(self.selected_directories)} 个目录，共 {len(all_files)} 个文件")
+    
+    def is_image_file(self, filename):
+        """检查文件是否为图片文件"""
+        image_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.gif']
+        return any(filename.lower().endswith(ext) for ext in image_extensions)
+    
+    def navigate_to_address(self):
+        """导航到地址栏指定的路径"""
+        path = self.address_bar.text().strip()
+        if path and os.path.isdir(path):
+            self.navigate_to_directory(path)
+        else:
+            QMessageBox.warning(self, "错误", "路径不存在或不是目录")
+    
+    def browse_directory(self):
+        """浏览目录对话框"""
+        directory = QFileDialog.getExistingDirectory(self, "选择目录", self.address_bar.text())
+        if directory:
+            self.navigate_to_directory(directory)
+    
+    def navigate_up(self):
+        """导航到上级目录"""
+        current_path = self.address_bar.text().strip()
+        if current_path and os.path.isdir(current_path):
+            parent_path = os.path.dirname(current_path)
+            if parent_path and os.path.isdir(parent_path):
+                self.navigate_to_directory(parent_path)
+    
+    def navigate_to_program_dir(self):
+        """导航到程序所在目录"""
+        program_dir = os.path.dirname(os.path.abspath(__file__))
+        self.navigate_to_directory(program_dir)
+    
+    def navigate_to_directory(self, directory_path):
+        """导航到指定目录"""
+        try:
+            # 更新地址栏
+            self.address_bar.setText(directory_path)
+            
+            # 重新填充目录树，使用指定路径作为根节点
+            self.populate_directory_tree(directory_path)
+            
+            # 更新文件列表
+            self.update_file_list()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"无法导航到目录: {str(e)}")
+    
+    def selectedFiles(self):
+        """返回选中的目录列表"""
+        return self.selected_directories
+
 
 
 class SpriteAlignerGUI(QMainWindow):
@@ -238,6 +759,7 @@ class SpriteAlignerGUI(QMainWindow):
         self.single_image_height_label.setText(self.language_dict[lang]['single_image_height'])
         
         # 更新复选框文本
+        self.stitch_by_group_check.setText(self.language_dict[self.current_language]['stitch_by_group'])
         
         # 更新自动对齐下拉框选项
         self.auto_align_combo.clear()
@@ -617,36 +1139,44 @@ class SpriteAlignerGUI(QMainWindow):
         stitch_layout = QGridLayout(self.stitch_group)
         # 限制拼接设置区域的高度
         self.stitch_group.setMaximumHeight(160)
-        
+
+        # 按组拼接选项
+        self.stitch_by_group_check = QCheckBox(self.language_dict[self.current_language]['stitch_by_group'])
+        self.stitch_by_group_check.setChecked(True)  # 默认勾选
+        self.stitch_by_group_check.stateChanged.connect(self.toggle_stitch_mode)
+        stitch_layout.addWidget(self.stitch_by_group_check, 0, 0, 1, 2)
+
         # 行列数设置
         self.columns_label = QLabel(self.language_dict[self.current_language]['columns'])
-        stitch_layout.addWidget(self.columns_label, 0, 0)
+        stitch_layout.addWidget(self.columns_label, 1, 0)
         self.cols_spin = QSpinBox()
         self.cols_spin.setRange(1, 100)
         self.cols_spin.setValue(10)
-        stitch_layout.addWidget(self.cols_spin, 0, 1)
+        stitch_layout.addWidget(self.cols_spin, 1, 1)
         
         self.rows_label = QLabel(self.language_dict[self.current_language]['rows'])
-        stitch_layout.addWidget(self.rows_label, 0, 2)
+        stitch_layout.addWidget(self.rows_label, 1, 2)
         self.rows_spin = QSpinBox()
         self.rows_spin.setRange(1, 100)
         self.rows_spin.setValue(10)
-        stitch_layout.addWidget(self.rows_spin, 0, 3)
-        
+        stitch_layout.addWidget(self.rows_spin, 1, 3)
+        # 初始状态：按组拼接选中时禁用行列数设置
+        self.toggle_stitch_mode()
+
         # 间距设置
         self.h_spacing_label = QLabel(self.language_dict[self.current_language]['horizontal_spacing'])
-        stitch_layout.addWidget(self.h_spacing_label, 1, 0)
+        stitch_layout.addWidget(self.h_spacing_label, 2, 0)
         self.h_spacing_spin = QSpinBox()
         self.h_spacing_spin.setRange(0, 100)
         self.h_spacing_spin.setValue(0)
-        stitch_layout.addWidget(self.h_spacing_spin, 1, 1)
+        stitch_layout.addWidget(self.h_spacing_spin, 2, 1)
         
         self.v_spacing_label = QLabel(self.language_dict[self.current_language]['vertical_spacing'])
-        stitch_layout.addWidget(self.v_spacing_label, 1, 2)
+        stitch_layout.addWidget(self.v_spacing_label, 2, 2)
         self.v_spacing_spin = QSpinBox()
         self.v_spacing_spin.setRange(0, 100)
         self.v_spacing_spin.setValue(0)
-        stitch_layout.addWidget(self.v_spacing_spin, 1, 3)
+        stitch_layout.addWidget(self.v_spacing_spin, 2, 3)
         
         # 单个图片大小设置
         # 首先检查语言字典中是否包含单个图片宽度和高度的键
@@ -660,18 +1190,19 @@ class SpriteAlignerGUI(QMainWindow):
             self.language_dict[self.current_language]['import_offset'] = '导入偏移设置'
         
         self.single_image_width_label = QLabel(self.language_dict[self.current_language]['single_image_width'])
-        stitch_layout.addWidget(self.single_image_width_label, 2, 0)
+        stitch_layout.addWidget(self.single_image_width_label, 3, 0)
         self.single_image_width_spin = QSpinBox()
+
         self.single_image_width_spin.setRange(0, 4096)
         self.single_image_width_spin.setValue(0)
-        stitch_layout.addWidget(self.single_image_width_spin, 2, 1)
+        stitch_layout.addWidget(self.single_image_width_spin, 3, 1)
         
         self.single_image_height_label = QLabel(self.language_dict[self.current_language]['single_image_height'])
-        stitch_layout.addWidget(self.single_image_height_label, 2, 2)
+        stitch_layout.addWidget(self.single_image_height_label, 3, 2)
         self.single_image_height_spin = QSpinBox()
         self.single_image_height_spin.setRange(0, 4096)
         self.single_image_height_spin.setValue(0)
-        stitch_layout.addWidget(self.single_image_height_spin, 2, 3)
+        stitch_layout.addWidget(self.single_image_height_spin, 3, 3)
         
         # 底部按钮区域
         button_layout = QHBoxLayout()
@@ -707,62 +1238,115 @@ class SpriteAlignerGUI(QMainWindow):
     
     def import_images(self):
         """导入分割后的小图片"""
-        # 打开文件选择对话框，允许选择多个图片文件
-        file_paths, _ = QFileDialog.getOpenFileNames(
-            self, self.language_dict[self.current_language]['select_split_images'], ".", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)"
-        )
+        # 询问用户导入方式
+        msg_box = QMessageBox()
+        msg_box.setWindowTitle(self.language_dict[self.current_language]['select_split_images'])
+        msg_box.setText(self.language_dict[self.current_language]['select_import_method'])
         
-        if file_paths:
-            # 清空之前的数据
-            self.image_files = []
-            self.images_data = []
-            self.image_list.clear()
-            self.ref_combo.clear()
+        # 添加按钮
+        file_btn = msg_box.addButton(self.language_dict[self.current_language]['import_by_files'], QMessageBox.ActionRole)
+        folder_btn = msg_box.addButton(self.language_dict[self.current_language]['import_by_folders'], QMessageBox.ActionRole)
+        cancel_btn = msg_box.addButton(QMessageBox.Cancel)
+        
+        msg_box.exec_()
+        
+        # 获取用户选择
+        clicked_btn = msg_box.clickedButton()
+        
+        if clicked_btn == file_btn:
+            # 文件方式导入
+            dialog = QFileDialog()
+            dialog.setWindowTitle(self.language_dict[self.current_language]['select_split_images'])
+            dialog.setFileMode(QFileDialog.ExistingFiles)
+            dialog.setNameFilter("Images (*.png *.jpg *.jpeg *.bmp *.gif)")
             
-            # 添加图片文件
-            for file_path in file_paths:
-                self.image_files.append(file_path)
-                # 为每个图片创建数据结构：(文件名, 偏移量x, 偏移量y, 原始图片尺寸)
-                with Image.open(file_path) as img:
-                    width, height = img.size
-                    self.images_data.append({
-                        'file_path': file_path,
-                        'offset_x': 0,
-                        'offset_y': 0,
-                        'width': width,
-                        'height': height
-                    })
-                # 添加到列表
-                filename = os.path.basename(file_path)
-                self.image_list.addItem(filename)
-                self.ref_combo.addItem(filename)
-            
-            QMessageBox.information(self, self.language_dict[self.current_language]['success'], 
-                                   self.language_dict[self.current_language]['success_imported'].format(len(file_paths)))
-            self.stitch_save_btn.setEnabled(True)
-            self.export_offset_btn.setEnabled(True)
-            self.import_offset_btn.setEnabled(True)
-            
-            # 启用相关控件
-            if len(file_paths) > 0:
-                self.ref_combo.setEnabled(True)
-                self.ref_check.setEnabled(True)
-                self.ref_opacity_slider.setEnabled(True)
-                # 启用缩放控件
-                self.zoom_slider.setEnabled(True)
-                self.zoom_in_btn.setEnabled(True)
-                self.zoom_out_btn.setEnabled(True)
-                self.reset_zoom_btn.setEnabled(True)
-            
-            # 自动选择第一张图片
-            if self.image_list.count() > 0:
-                self.image_list.setCurrentRow(0)
-                self.select_image(self.image_list.item(0))
-            
-            # 默认选择第一张图片作为参考图
-            if self.ref_combo.count() > 0:
-                self.ref_combo.setCurrentIndex(0)
-                self.ref_index = 0
+            if dialog.exec_():
+                selected_files = dialog.selectedFiles()
+                if selected_files:
+                    self.process_imported_items(selected_files, is_files=True)
+        elif clicked_btn == folder_btn:
+            # 文件夹方式导入
+            # 创建自定义文件选择对话框
+            dialog = AdvancedImageFileDialog(self, self.language_dict, self.current_language)
+            dialog.setWindowTitle(self.language_dict[self.current_language]['select_split_images'])
+            if dialog.exec_():
+                selected_folders = dialog.selectedFiles()
+                if selected_folders:
+                    self.process_imported_items(selected_folders, is_files=False)
+    
+    def process_imported_items(self, items, is_files):
+        """处理导入的文件或文件夹"""
+        # 清空之前的数据
+        self.image_files = []
+        self.images_data = []
+        self.image_list.clear()
+        self.ref_combo.clear()
+        
+        # 收集所有图片文件
+        all_image_files = []
+        
+        if is_files:
+            # 处理文件列表
+            for file_path in items:
+                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+                    folder_path = os.path.dirname(file_path)
+                    all_image_files.append((folder_path, file_path))
+        else:
+            # 处理文件夹列表
+            for folder_path in items:
+                for root, dirs, files in os.walk(folder_path):
+                    for file in files:
+                        if file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+                            file_path = os.path.join(root, file)
+                            all_image_files.append((folder_path, file_path))
+        
+        # 添加图片文件
+        for folder_path, file_path in all_image_files:
+            self.image_files.append(file_path)
+            # 为每个图片创建数据结构：(文件名, 偏移量x, 偏移量y, 原始图片尺寸)
+            with Image.open(file_path) as img:
+                width, height = img.size
+                self.images_data.append({
+                    'file_path': file_path,
+                    'offset_x': 0,
+                    'offset_y': 0,
+                    'width': width,
+                    'height': height
+                })
+            # 添加到列表，带文件夹前缀
+            group_name = os.path.basename(folder_path)
+            filename = os.path.basename(file_path)
+            display_name = f"[{group_name}] {filename}"
+            self.image_list.addItem(display_name)
+            self.ref_combo.addItem(display_name)
+        
+        QMessageBox.information(self, self.language_dict[self.current_language]['success'], 
+                               self.language_dict[self.current_language]['success_imported'].format(len(all_image_files)))
+        
+        self.stitch_save_btn.setEnabled(True)
+        self.export_offset_btn.setEnabled(True)
+        self.import_offset_btn.setEnabled(True)
+        
+        # 启用相关控件
+        if len(all_image_files) > 0:
+            self.ref_combo.setEnabled(True)
+            self.ref_check.setEnabled(True)
+            self.ref_opacity_slider.setEnabled(True)
+            # 启用缩放控件
+            self.zoom_slider.setEnabled(True)
+            self.zoom_in_btn.setEnabled(True)
+            self.zoom_out_btn.setEnabled(True)
+            self.reset_zoom_btn.setEnabled(True)
+        
+        # 自动选择第一张图片
+        if self.image_list.count() > 0:
+            self.image_list.setCurrentRow(0)
+            self.select_image(self.image_list.item(0))
+        
+        # 默认选择第一张图片作为参考图
+        if self.ref_combo.count() > 0:
+            self.ref_combo.setCurrentIndex(0)
+            self.ref_index = 0
     
     def select_image(self, item):
         """选择列表中的图片"""
@@ -1435,11 +2019,24 @@ class SpriteAlignerGUI(QMainWindow):
                 cell_width = max_width + h_spacing
                 cell_height = max_height + v_spacing
             
-            # 收集所有图片数据
+            # 收集所有图片数据，并按组名分组
+            grouped_images = {}
             for img_data in self.images_data:
                 with Image.open(img_data['file_path']) as img:
                     orig_width, orig_height = img.size
-                    all_images.append((img_data, orig_width, orig_height))
+                    # 从列表项文本中获取组名
+                    list_item_text = self.image_list.item(self.images_data.index(img_data)).text()
+                    group_name = "默认组"
+                    # 检查是否包含组名前缀
+                    if list_item_text.startswith('['):
+                        group_end = list_item_text.find(']')
+                        if group_end > 0:
+                            group_name = list_item_text[1:group_end]
+                    
+                    # 将图片添加到对应组
+                    if group_name not in grouped_images:
+                        grouped_images[group_name] = []
+                    grouped_images[group_name].append((img_data, orig_width, orig_height))
             
             # 确定单元格的基准尺寸（不包含间距）
             if single_width > 0 and single_height > 0:
@@ -1456,63 +2053,143 @@ class SpriteAlignerGUI(QMainWindow):
             max_x = 0
             max_y = 0
             
-            # 先收集所有图片的位置信息
+            # 收集所有图片的位置信息
             image_positions = []
-            for i, (img_data, orig_width, orig_height) in enumerate(all_images):
-                if i >= cols * rows:
-                    break
+            
+            # 检查是否按组拼接
+            stitch_by_group = self.stitch_by_group_check.isChecked()
+            
+            if stitch_by_group:
+                # 按组拼接：每个组占据一行
+                current_row = 0
                 
-                # 计算当前图片在网格中的行列位置
-                row = i // cols
-                col = i % cols
+                # 遍历每个组
+                for group_name, images in grouped_images.items():
+                    # 为每个组创建一行
+                    for i, (img_data, orig_width, orig_height) in enumerate(images):
+                        if i >= cols:
+                            break
+                        
+                        # 计算当前图片在网格中的行列位置
+                        # 同一组的图片在同一行
+                        row = current_row
+                        col = i % cols
+                        
+                        # 计算单元格左上角坐标（不考虑偏移）
+                        cell_x = col * cell_width
+                        cell_y = row * cell_height
+                        
+                        # 计算图片在单元格中的偏移量（考虑用户调整）
+                        offset_x = img_data['offset_x']
+                        offset_y = img_data['offset_y']
+                        
+                        # 计算单元格中心位置
+                        cell_center_x = cell_x + base_cell_width // 2
+                        cell_center_y = cell_y + base_cell_height // 2
+                        
+                        # 计算图片中心点在单元格中的位置（考虑偏移量）
+                        center_x = cell_center_x + offset_x
+                        center_y = cell_center_y + offset_y
+                        
+                        # 计算图片左上角和右下角坐标
+                        # 如果用户指定了单个图片大小，使用指定大小，否则使用原始图片大小
+                        if single_width > 0 and single_height > 0:
+                            # 使用用户指定的大小计算坐标
+                            img_left = center_x - single_width // 2
+                            img_top = center_y - single_height // 2
+                            img_right = center_x + single_width // 2
+                            img_bottom = center_y + single_height // 2
+                        else:
+                            # 使用原始图片大小计算坐标
+                            img_left = center_x - orig_width // 2
+                            img_top = center_y - orig_height // 2
+                            img_right = center_x + orig_width // 2
+                            img_bottom = center_y + orig_height // 2
+                        
+                        # 更新全局坐标范围
+                        min_x = min(min_x, img_left)
+                        min_y = min(min_y, img_top)
+                        max_x = max(max_x, img_right)
+                        max_y = max(max_y, img_bottom)
+                        
+                        # 保存图片位置信息
+                        image_positions.append({
+                            'img_data': img_data,
+                            'orig_width': orig_width,
+                            'orig_height': orig_height,
+                            'left': img_left,
+                            'top': img_top,
+                            'center_x': center_x,
+                            'center_y': center_y
+                        })
+                    
+                    # 下一组换行
+                    current_row += 1
+            else:
+                # 不按组拼接：按照指定的列数和行数依次摆放所有图片
+                all_images = []
+                for group_name, images in grouped_images.items():
+                    for img_data, orig_width, orig_height in images:
+                        all_images.append((img_data, orig_width, orig_height))
                 
-                # 计算单元格左上角坐标（不考虑偏移）
-                cell_x = col * cell_width
-                cell_y = row * cell_height
+                # 按照指定的行数和列数依次摆放
+                total_images = len(all_images)
+                max_images = cols * rows
                 
-                # 计算图片在单元格中的偏移量（考虑用户调整）
-                offset_x = img_data['offset_x']
-                offset_y = img_data['offset_y']
-                
-                # 计算单元格中心位置
-                cell_center_x = cell_x + base_cell_width // 2
-                cell_center_y = cell_y + base_cell_height // 2
-                
-                # 计算图片中心点在单元格中的位置（考虑偏移量）
-                center_x = cell_center_x + offset_x
-                center_y = cell_center_y + offset_y
-                
-                # 计算图片左上角和右下角坐标
-                # 如果用户指定了单个图片大小，使用指定大小，否则使用原始图片大小
-                if single_width > 0 and single_height > 0:
-                    # 使用用户指定的大小计算坐标
-                    img_left = center_x - single_width // 2
-                    img_top = center_y - single_height // 2
-                    img_right = center_x + single_width // 2
-                    img_bottom = center_y + single_height // 2
-                else:
-                    # 使用原始图片大小计算坐标
-                    img_left = center_x - orig_width // 2
-                    img_top = center_y - orig_height // 2
-                    img_right = center_x + orig_width // 2
-                    img_bottom = center_y + orig_height // 2
-                
-                # 更新全局坐标范围
-                min_x = min(min_x, img_left)
-                min_y = min(min_y, img_top)
-                max_x = max(max_x, img_right)
-                max_y = max(max_y, img_bottom)
-                
-                # 保存图片位置信息
-                image_positions.append({
-                    'img_data': img_data,
-                    'orig_width': orig_width,
-                    'orig_height': orig_height,
-                    'left': img_left,
-                    'top': img_top,
-                    'center_x': center_x,
-                    'center_y': center_y
-                })
+                for i in range(min(total_images, max_images)):
+                    img_data, orig_width, orig_height = all_images[i]
+                    
+                    # 计算当前图片在网格中的行列位置
+                    row = i // cols
+                    col = i % cols
+                    
+                    # 计算单元格左上角坐标（不考虑偏移）
+                    cell_x = col * cell_width
+                    cell_y = row * cell_height
+                    
+                    # 计算图片在单元格中的偏移量（考虑用户调整）
+                    offset_x = img_data['offset_x']
+                    offset_y = img_data['offset_y']
+                    
+                    # 计算单元格中心位置
+                    cell_center_x = cell_x + base_cell_width // 2
+                    cell_center_y = cell_y + base_cell_height // 2
+                    
+                    # 计算图片中心点在单元格中的位置（考虑偏移量）
+                    center_x = cell_center_x + offset_x
+                    center_y = cell_center_y + offset_y
+                    
+                    # 计算图片左上角和右下角坐标
+                    # 如果用户指定了单个图片大小，使用指定大小，否则使用原始图片大小
+                    if single_width > 0 and single_height > 0:
+                        # 使用用户指定的大小计算坐标
+                        img_left = center_x - single_width // 2
+                        img_top = center_y - single_height // 2
+                        img_right = center_x + single_width // 2
+                        img_bottom = center_y + single_height // 2
+                    else:
+                        # 使用原始图片大小计算坐标
+                        img_left = center_x - orig_width // 2
+                        img_top = center_y - orig_height // 2
+                        img_right = center_x + orig_width // 2
+                        img_bottom = center_y + orig_height // 2
+                    
+                    # 更新全局坐标范围
+                    min_x = min(min_x, img_left)
+                    min_y = min(min_y, img_top)
+                    max_x = max(max_x, img_right)
+                    max_y = max(max_y, img_bottom)
+                    
+                    # 保存图片位置信息
+                    image_positions.append({
+                        'img_data': img_data,
+                        'orig_width': orig_width,
+                        'orig_height': orig_height,
+                        'left': img_left,
+                        'top': img_top,
+                        'center_x': center_x,
+                        'center_y': center_y
+                    })
             
             # 4. 计算最终拼接图的尺寸
             # 使用自动计算的尺寸，基于单个图片大小和行列数
@@ -1655,6 +2332,16 @@ class SpriteAlignerGUI(QMainWindow):
                 QMessageBox.information(self, "成功", f"已应用 {applied_count} 个偏移设置")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"导入失败：{str(e)}")
+    
+    def toggle_stitch_mode(self):
+        """切换拼接模式：按组拼接时禁用行列数设置，否则启用"""
+        stitch_by_group = self.stitch_by_group_check.isChecked()
+        
+        # 启用或禁用行列数设置控件
+        self.columns_label.setEnabled(not stitch_by_group)
+        self.cols_spin.setEnabled(not stitch_by_group)
+        self.rows_label.setEnabled(not stitch_by_group)
+        self.rows_spin.setEnabled(not stitch_by_group)
     
     def show_stitch_preview(self, stitch_img):
         """显示拼接结果预览"""
