@@ -30,7 +30,8 @@
         "transparent_background": "透明化背景",
         "add_detection_area": "添加检测范围",
         "remove_detection_area": "删除选中检测范围",
-        "clear_detection_areas": "清除所有检测范围"
+        "clear_detection_areas": "清除所有检测范围",
+        "operation_tip": "按住 Shift 键 并点击鼠标可交换精灵之间的序号"
     },
     "en_US": {
         "window_title": "Smart Sprite Splitter",
@@ -63,6 +64,7 @@
         "transparent_background": "Transparent Background",
         "add_detection_area": "Add Detection Area",
         "remove_detection_area": "Delete Selected Detection Area",
-        "clear_detection_areas": "Clear All Detection Areas"
+        "clear_detection_areas": "Clear All Detection Areas",
+        "operation_tip": "Hold Shift key + click twice on sprites\nTo swap sprite indexes"
     }
 }
