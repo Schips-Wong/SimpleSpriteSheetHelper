@@ -818,11 +818,16 @@ class SpriteAlignerGUI(QMainWindow):
     
     def delete_selected_image(self):
         """删除选中的图片"""
-        if self.selected_index < 0 or self.selected_index >= len(self.images_data):
+        # 获取当前选中的行索引，直接从列表控件获取
+        current_row = self.image_list.currentRow()
+        if current_row < 0 or current_row >= len(self.images_data):
             return
         
+        # 使用当前行索引而不是self.selected_index
+        delete_index = current_row
+        
         # 获取要删除的图片信息
-        img_data = self.images_data[self.selected_index]
+        img_data = self.images_data[delete_index]
         img_name = os.path.basename(img_data['file_path'])
         
         # 显示确认对话框
@@ -835,28 +840,32 @@ class SpriteAlignerGUI(QMainWindow):
         if reply == QMessageBox.Yes:
             # 删除图片
             # 1. 从图片列表中删除
-            self.image_list.takeItem(self.selected_index)
+            self.image_list.takeItem(delete_index)
             
             # 2. 从数据列表中删除
-            del self.images_data[self.selected_index]
+            del self.images_data[delete_index]
             
-            # 3. 更新参考图下拉框
+            # 3. 从文件路径列表中删除对应的项
+            if delete_index < len(self.image_files):
+                del self.image_files[delete_index]
+            
+            # 4. 更新参考图下拉框
             self.update_ref_combo_order()
             
-            # 4. 检查是否删除的是参考图
-            if self.ref_index == self.selected_index:
+            # 5. 检查是否删除的是参考图
+            if self.ref_index == delete_index:
                 self.ref_index = -1
                 self.show_ref = False
                 self.ref_check.setChecked(False)
-            elif self.ref_index > self.selected_index:
+            elif self.ref_index > delete_index:
                 # 如果参考图索引大于删除的索引，需要递减
                 self.ref_index -= 1
             
-            # 5. 更新当前选中索引
+            # 6. 更新当前选中索引
             total_items = self.image_list.count()
             if total_items > 0:
                 # 如果还有图片，选择新的图片
-                new_index = min(self.selected_index, total_items - 1)
+                new_index = min(delete_index, total_items - 1)
                 self.image_list.setCurrentRow(new_index)
                 self.select_image(self.image_list.item(new_index))
             else:
@@ -882,7 +891,7 @@ class SpriteAlignerGUI(QMainWindow):
                 self.ref_check.setEnabled(False)
                 self.ref_opacity_slider.setEnabled(False)
             
-            # 6. 更新工作区显示
+            # 7. 更新工作区显示
             self.update_workspace()
             
             # 7. 显示删除成功消息
@@ -926,8 +935,9 @@ class SpriteAlignerGUI(QMainWindow):
         self.select_image(self.image_list.currentItem())
     
     def update_images_data_order(self):
-        """根据图片列表的顺序更新images_data列表"""
+        """根据图片列表的顺序更新images_data列表和image_files列表"""
         new_order = []
+        new_files_order = []
         for i in range(self.image_list.count()):
             # 获取项目文本
             item_text = self.image_list.item(i).text()
@@ -935,9 +945,13 @@ class SpriteAlignerGUI(QMainWindow):
             for img_data in self.images_data:
                 if os.path.basename(img_data['file_path']) == item_text:
                     new_order.append(img_data)
+                    # 添加到新的文件路径列表
+                    new_files_order.append(img_data['file_path'])
                     break
         # 更新images_data列表
         self.images_data = new_order
+        # 更新image_files列表
+        self.image_files = new_files_order
         # 更新参考图下拉框
         self.update_ref_combo_order()
     
