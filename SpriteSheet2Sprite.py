@@ -181,6 +181,8 @@ class SpriteCanvas(QLabel):
         self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         # 设置鼠标跟踪
         self.setMouseTracking(True)
+        # 设置焦点策略，以便接收键盘事件
+        self.setFocusPolicy(Qt.StrongFocus)
         self.image_path = None
         self.pixmap = None
         self.original_pixmap = None
@@ -206,6 +208,17 @@ class SpriteCanvas(QLabel):
         self.drag_start_pos = QPoint()  # 拖拽开始位置
         self.original_rect = QRect()
         self.handle_size = 8  # 调整大小的控制点大小
+        
+        # 拖拽重排序相关变量
+        self.is_reordering = False  # 是否处于拖拽重排序模式
+        self.reorder_start_index = -1  # 开始拖拽的精灵索引
+        self.reorder_drag_pos = QPoint()  # 拖拽起始位置
+        # Shift+点击交换相关变量
+        self.is_shift_pressed = False  # Shift键是否按下
+        self.swap_start_index = -1  # 第一个选中的交换对象索引
+        
+        # 撤销功能相关变量
+        self.undo_stack = []  # 撤销栈，保存检测区域移动前的状态
 
     def set_scale(self, scale):
         """设置缩放比例"""
@@ -284,7 +297,11 @@ class SpriteCanvas(QLabel):
             draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
 
             # 设置画笔样式
-            if i == self.selected_rect_index:
+            if i == self.swap_start_index:
+                # 第一个选中的交换对象，使用特殊样式
+                pen = QPen(QColor(0, 0, 255), 3, Qt.DashLine)
+                brush = QBrush(QColor(0, 0, 255, 30))
+            elif i == self.selected_rect_index:
                 pen = QPen(QColor(255, 0, 0), 2, Qt.SolidLine)
                 brush = QBrush(QColor(255, 0, 0, 30))
             elif i == self.hover_rect_index and not self.drawing_mode:
@@ -304,6 +321,22 @@ class SpriteCanvas(QLabel):
             # 如果是选中的选框，绘制调整大小的控制点
             if i == self.selected_rect_index:
                 self.draw_handles(painter, rect)
+            # 如果是第一个选中的交换对象，绘制特殊的交换控制点
+            elif i == self.swap_start_index:
+                # 绘制四个角的交换标记
+                marker_size = 12
+                # 左上角
+                painter.drawLine(scaled_x, scaled_y, scaled_x + marker_size, scaled_y + marker_size)
+                painter.drawLine(scaled_x, scaled_y + marker_size, scaled_x + marker_size, scaled_y)
+                # 右上角
+                painter.drawLine(scaled_x + scaled_width, scaled_y, scaled_x + scaled_width - marker_size, scaled_y + marker_size)
+                painter.drawLine(scaled_x + scaled_width, scaled_y + marker_size, scaled_x + scaled_width - marker_size, scaled_y)
+                # 左下角
+                painter.drawLine(scaled_x, scaled_y + scaled_height, scaled_x + marker_size, scaled_y + scaled_height - marker_size)
+                painter.drawLine(scaled_x, scaled_y + scaled_height - marker_size, scaled_x + marker_size, scaled_y + scaled_height)
+                # 右下角
+                painter.drawLine(scaled_x + scaled_width, scaled_y + scaled_height, scaled_x + scaled_width - marker_size, scaled_y + scaled_height - marker_size)
+                painter.drawLine(scaled_x + scaled_width, scaled_y + scaled_height - marker_size, scaled_x + scaled_width - marker_size, scaled_y + scaled_height)
 
         # 绘制检测范围框
         for i, rect in enumerate(self.detection_areas):
@@ -467,35 +500,71 @@ class SpriteCanvas(QLabel):
                         break
 
                 if clicked_rect_index != -1:
-                    # 选中精灵区域
-                    self.selected_rect_index = clicked_rect_index
-                    self.selected_area_index = -1
-                    self.hover_area_index = -1
-                    
-                    # 检查是否在调整大小的控制点上
-                    rect = self.sprite_rects[self.selected_rect_index]
-                    direction = self.get_resize_direction(event.pos(), rect)
-                    if direction != self.NONE:
-                        # 开始调整大小
-                        self.is_resizing = True
-                        self.resize_direction = direction
-                        self.resize_start_pos = event.pos()
-                        self.original_rect = QRect(
-                            int(rect[0] * self.scale_factor),
-                            int(rect[1] * self.scale_factor),
-                            int(rect[2] * self.scale_factor),
-                            int(rect[3] * self.scale_factor)
-                        )
+                    # 检查是否按下了Shift键（用于交换）
+                    if event.modifiers() & Qt.ShiftModifier:
+                        if self.swap_start_index == -1:
+                            # 第一次点击，记录起始索引
+                            self.swap_start_index = clicked_rect_index
+                            self.selected_rect_index = -1  # 取消普通选中
+                            self.update()
+                        elif self.swap_start_index != clicked_rect_index:
+                            # 第二次点击，交换两个精灵
+                            # 保存当前精灵区域状态到撤销栈
+                            self.undo_stack.append((self.sprite_rects.copy(), self.detection_areas.copy()))
+                            # 交换精灵位置
+                            self.sprite_rects[self.swap_start_index], self.sprite_rects[clicked_rect_index] = \
+                                self.sprite_rects[clicked_rect_index], self.sprite_rects[self.swap_start_index]
+                            
+                            # 更新选中索引
+                            self.selected_rect_index = clicked_rect_index
+                            # 重置交换状态
+                            self.swap_start_index = -1
+                            # 发射更新信号
+                            self.rect_updated.emit()
+                            self.rect_selected.emit(self.selected_rect_index)
+                            self.update()
+                        else:
+                            # 点击了同一个精灵，取消选中
+                            self.swap_start_index = -1
+                            self.selected_rect_index = clicked_rect_index
+                            self.update()
+                            self.rect_selected.emit(self.selected_rect_index)
                     else:
-                        # 开始拖拽移动
-                        self.is_dragging = True
-                        self.drag_start_pos = event.pos()
-                        self.original_rect = QRect(
-                            int(rect[0] * self.scale_factor),
-                            int(rect[1] * self.scale_factor),
-                            int(rect[2] * self.scale_factor),
-                            int(rect[3] * self.scale_factor)
-                        )
+                        # 普通点击选择
+                        self.swap_start_index = -1  # 重置交换状态
+                        # 选中精灵区域
+                        self.selected_rect_index = clicked_rect_index
+                        self.selected_area_index = -1
+                        self.hover_area_index = -1
+                        
+                        # 检查是否在调整大小的控制点上
+                        rect = self.sprite_rects[self.selected_rect_index]
+                        direction = self.get_resize_direction(event.pos(), rect)
+                        if direction != self.NONE:
+                            # 开始调整大小
+                            self.is_resizing = True
+                            self.resize_direction = direction
+                            self.resize_start_pos = event.pos()
+                            # 保存当前精灵区域状态到撤销栈
+                            self.undo_stack.append((self.sprite_rects.copy(), self.detection_areas.copy()))
+                            self.original_rect = QRect(
+                                int(rect[0] * self.scale_factor),
+                                int(rect[1] * self.scale_factor),
+                                int(rect[2] * self.scale_factor),
+                                int(rect[3] * self.scale_factor)
+                            )
+                        else:
+                            # 开始拖拽移动
+                            self.is_dragging = True
+                            self.drag_start_pos = event.pos()
+                            # 保存当前精灵区域状态到撤销栈
+                            self.undo_stack.append((self.sprite_rects.copy(), self.detection_areas.copy()))
+                            self.original_rect = QRect(
+                                int(rect[0] * self.scale_factor),
+                                int(rect[1] * self.scale_factor),
+                                int(rect[2] * self.scale_factor),
+                                int(rect[3] * self.scale_factor)
+                            )
                     
                     self.update()
                     self.rect_selected.emit(self.selected_rect_index)
@@ -531,6 +600,8 @@ class SpriteCanvas(QLabel):
                         self.is_resizing = True
                         self.resize_direction = direction
                         self.resize_start_pos = event.pos()
+                        # 保存当前检测区域状态到撤销栈
+                        self.undo_stack.append(self.detection_areas.copy())
                         self.original_rect = QRect(
                             int(rect[0] * self.scale_factor),
                             int(rect[1] * self.scale_factor),
@@ -541,6 +612,8 @@ class SpriteCanvas(QLabel):
                         # 开始拖拽移动
                         self.is_dragging = True
                         self.drag_start_pos = event.pos()
+                        # 保存当前检测区域状态到撤销栈
+                        self.undo_stack.append(self.detection_areas.copy())
                         self.original_rect = QRect(
                             int(rect[0] * self.scale_factor),
                             int(rect[1] * self.scale_factor),
@@ -626,6 +699,40 @@ class SpriteCanvas(QLabel):
         elif self.selected_rect_index != -1:
             # 移动精灵区域
             self.drag_sprite_rect(pos)
+    
+    def reorder_rect(self, pos):
+        """拖拽重排序精灵"""
+        if not self.is_reordering or self.reorder_start_index == -1:
+            return
+        
+        # 检测鼠标当前位置下的精灵索引
+        current_index = -1
+        for i, rect in enumerate(self.sprite_rects):
+            x, y, width, height = rect
+            scaled_x = int(x * self.scale_factor)
+            scaled_y = int(y * self.scale_factor)
+            scaled_width = int(width * self.scale_factor)
+            scaled_height = int(height * self.scale_factor)
+            
+            draw_rect = QRect(scaled_x, scaled_y, scaled_width, scaled_height)
+            if draw_rect.contains(pos):
+                current_index = i
+                break
+        
+        # 如果鼠标在另一个精灵上，并且与起始索引不同，就交换它们的位置
+        if current_index != -1 and current_index != self.reorder_start_index:
+            # 交换精灵位置
+            self.sprite_rects[self.reorder_start_index], self.sprite_rects[current_index] = \
+                self.sprite_rects[current_index], self.sprite_rects[self.reorder_start_index]
+            
+            # 更新选中的索引
+            self.selected_rect_index = current_index
+            self.reorder_start_index = current_index
+            
+            # 发射更新信号
+            self.rect_updated.emit()
+            self.rect_selected.emit(self.selected_rect_index)
+            self.update()
 
     def drag_sprite_rect(self, pos):
         """拖拽移动精灵区域"""
@@ -931,12 +1038,48 @@ class SpriteCanvas(QLabel):
 
             # 发射缩放变化信号
             self.scale_changed.emit(new_scale)
+    
+    def keyPressEvent(self, event):
+        """处理键盘按下事件"""
+        if event.key() == Qt.Key_Shift:
+            self.is_shift_pressed = True
+    
+    def keyReleaseEvent(self, event):
+        """处理键盘释放事件"""
+        if event.key() == Qt.Key_Shift:
+            self.is_shift_pressed = False
+            # 释放Shift键时，重置交换状态
+            self.swap_start_index = -1
+            self.update()
 
     def get_selected_rect(self):
         """获取选中的矩形"""
         if self.selected_rect_index != -1:
             return self.sprite_rects[self.selected_rect_index]
         return None
+    
+    def keyPressEvent(self, event):
+        """键盘事件处理"""
+        # 处理Ctrl+Z撤销操作
+        if event.modifiers() & Qt.ControlModifier and event.key() == Qt.Key_Z:
+            self.undo_last_action()
+    
+    def undo_last_action(self):
+        """撤销最后一次操作，包括精灵区域和检测区域的移动或调整大小"""
+        if self.undo_stack:
+            # 恢复上一个状态
+            last_state = self.undo_stack.pop()
+            
+            # 检查状态类型，兼容旧的只包含检测区域的状态
+            if isinstance(last_state, tuple):
+                # 新状态格式：(sprite_rects, detection_areas)
+                self.sprite_rects, self.detection_areas = last_state
+            else:
+                # 旧状态格式：只包含detection_areas
+                self.detection_areas = last_state
+            
+            self.update()
+            self.rect_updated.emit()
 
 
 class SpriteSplitterGUI(QMainWindow):
@@ -992,7 +1135,8 @@ class SpriteSplitterGUI(QMainWindow):
                     'transparent_background': '透明化背景',
                     'add_detection_area': '添加检测范围',
                     'remove_detection_area': '删除选中检测范围',
-                    'clear_detection_areas': '清除所有检测范围'
+                    'clear_detection_areas': '清除所有检测范围',
+                    'operation_tip': '按住 Shift 键 + 依次点击两次精灵可交换序号'
                 },
                 'en_US': {
                     'window_title': 'Smart Sprite Splitter',
@@ -1024,7 +1168,8 @@ class SpriteSplitterGUI(QMainWindow):
                     'transparent_background': 'Transparent Background',
                     'add_detection_area': 'Add Detection Area',
                     'remove_detection_area': 'Delete Selected Detection Area',
-                    'clear_detection_areas': 'Clear All Detection Areas'
+                    'clear_detection_areas': 'Clear All Detection Areas',
+                    'operation_tip': 'Hold Shift key + click twice on sprites\nTo swap sprite indexes'
                 }
             }
 
@@ -1122,15 +1267,19 @@ class SpriteSplitterGUI(QMainWindow):
         self.clear_all_rects_btn = QPushButton(self.language_dict[self.current_language]['clear_all_rects'])
         self.clear_all_rects_btn.clicked.connect(self.clear_all_rects)
         main_buttons_layout.addWidget(self.clear_all_rects_btn)
-        
+
+        # 添加操作提示标签
+        self.operation_tip_label = QLabel(self.language_dict[self.current_language]['operation_tip'])
+        self.operation_tip_label.setStyleSheet("color: #666; background-color: #f5f5f5; padding: 8px; border-radius: 4px;")
+        self.operation_tip_label.setWordWrap(True)
+        main_buttons_layout.addWidget(self.operation_tip_label)
+
         self.nobody_label_3 = QLabel("")
         main_buttons_layout.addWidget(self.nobody_label_3)
 
         self.start_split_btn = QPushButton(self.language_dict[self.current_language]['start_split'])
         self.start_split_btn.clicked.connect(self.start_split)
         main_buttons_layout.addWidget(self.start_split_btn)
-
-
 
 
         # 控制区域
@@ -1206,7 +1355,7 @@ class SpriteSplitterGUI(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         control_layout.addWidget(self.progress_bar)
-
+            
         # 将按钮布局和控制区域添加到右侧布局
         right_layout.addLayout(main_buttons_layout)
         right_layout.addWidget(self.control_group)
@@ -1512,6 +1661,9 @@ class SpriteSplitterGUI(QMainWindow):
         self.rect_count_label_text.setText(self.language_dict[lang]['sprite_count'])
         self.scale_label_text.setText(self.language_dict[lang]['scale'])
         self.transparent_checkbox.setText(self.language_dict[lang]['transparent_background'])
+        
+        # 更新操作提示标签
+        self.operation_tip_label.setText(f"\n{self.language_dict[lang]['operation_tip']}")
 
 
 
