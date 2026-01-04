@@ -90,7 +90,9 @@
         "select_import_method": "请选择导入方式：",
         "import_by_files": "导入多文件(单组)",
         "import_by_folders": "导入多目录(多组)",
-        "stitch_by_group": "按组拼接(每组占据一行)"
+        "stitch_by_group": "按组拼接(每组占据一行)",
+        "export_offset": "导出偏移设置",
+        "import_offset": "导入偏移设置"
     },
     "en_US": {
         "window_title": "Sprite Aligner",
@@ -183,6 +185,8 @@
         "select_import_method": "Please select import method:",
         "import_by_files": "Import Multi-File (Single Group)",
         "import_by_folders": "Import Multi-Directory (Multi-Group)",
-        "stitch_by_group": "Stitch by Group (Each group occupies a row)"
+        "stitch_by_group": "Stitch by Group (Each group occupies a row)",
+        "export_offset": "Export Offset Settings",
+        "import_offset": "Import Offset Settings"
     }
 }
