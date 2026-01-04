@@ -1421,6 +1421,54 @@ class SpriteSplitterGUI(QMainWindow):
     def on_detection_finished(self, rects):
         """检测完成处理"""
         self.progress_bar.setVisible(False)
+        
+        # 对检测到的精灵区域进行排序：从上到下，从左到右
+        if rects:
+            # 1. 先按精灵中心点的Y坐标进行初步排序，确定大致的上下顺序
+            rects.sort(key=lambda rect: rect[1] + rect[3]/2)
+            
+            # 2. 计算每个精灵的高度和中心点
+            heights = [rect[3] for rect in rects]
+            avg_height = sum(heights) / len(heights)
+            
+            # 3. 更智能的容差计算：使用平均高度的70%，容差更大
+            tolerance = avg_height * 0.7
+            
+            # 4. 使用更精确的行分组算法：排序后相邻分组
+            rows = []
+            current_row = []
+            
+            for rect in rects:
+                rect_center_y = rect[1] + rect[3]/2
+                
+                if not current_row:
+                    # 第一行的第一个精灵
+                    current_row.append(rect)
+                else:
+                    # 计算当前行的平均中心Y坐标
+                    row_center_y = sum(r[1] + r[3]/2 for r in current_row) / len(current_row)
+                    
+                    # 如果当前精灵的中心Y坐标与行平均中心Y坐标的差在容差范围内，则加入当前行
+                    if abs(rect_center_y - row_center_y) <= tolerance:
+                        current_row.append(rect)
+                    else:
+                        # 否则创建新行
+                        rows.append(current_row)
+                        current_row = [rect]
+            
+            # 处理最后一行
+            if current_row:
+                rows.append(current_row)
+            
+            # 5. 对每一行内的精灵按中心点X坐标排序，实现从左到右
+            sorted_rects = []
+            for row in rows:
+                # 同一行内按中心点X坐标排序
+                row.sort(key=lambda rect: rect[0] + rect[2]/2)
+                sorted_rects.extend(row)
+            
+            rects = sorted_rects
+        
         self.canvas.set_sprite_rects(rects)
         self.rect_count_label.setText(str(len(rects)))
         self.detection_thread.quit()
