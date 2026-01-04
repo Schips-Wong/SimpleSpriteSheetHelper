@@ -11,6 +11,7 @@ A Python toolset for SpriteSheet image processing, including intelligent splitti
 - Supports zooming and panning for viewing
 - Generates sequentially named image files
 - Supports custom output directory
+- Supports swapping sprite sequence numbers
 - Chinese and English interface switching support
 
 ### Alignment Tool
@@ -24,6 +25,8 @@ A Python toolset for SpriteSheet image processing, including intelligent splitti
 - Supports zooming and panning for viewing
 - Re-stitch processed sprites into a complete spritesheet
 - Supports adjustment of rows, columns, and spacing
+- Supports importing multiple directories, exporting with each group in one row
+- Supports import/export offset settings
 - Chinese and English interface switching support
 
 ## Installation Dependencies
