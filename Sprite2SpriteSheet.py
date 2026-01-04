@@ -731,6 +731,8 @@ class SpriteAlignerGUI(QMainWindow):
         self.auto_align_btn.setText(self.language_dict[lang]['apply_to_current'])
         self.batch_align_btn.setText(self.language_dict[lang]['batch_apply'])
         self.stitch_save_btn.setText(self.language_dict[lang]['stitch_save'])
+        self.export_offset_btn.setText(self.language_dict[lang]['export_offset'])
+        self.import_offset_btn.setText(self.language_dict[lang]['import_offset'])
         
         # 更新标签文本
         self.grid_size_label.setText(self.language_dict[lang]['grid_size'])
