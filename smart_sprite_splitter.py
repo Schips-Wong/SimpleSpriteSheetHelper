@@ -1133,6 +1133,7 @@ class SpriteSplitterGUI(QMainWindow):
                     'error': '错误',
                     'splitting_failed': '分割失败：{0}',
                     'transparent_background': '透明化背景',
+                    'export_by_detection_area': '按检测区域为组导出（序号重新编号）',
                     'add_detection_area': '添加检测范围',
                     'remove_detection_area': '删除选中检测范围',
                     'clear_detection_areas': '清除所有检测范围',
@@ -1166,6 +1167,7 @@ class SpriteSplitterGUI(QMainWindow):
                     'error': 'Error',
                     'splitting_failed': 'Splitting failed: {0}',
                     'transparent_background': 'Transparent Background',
+                    'export_by_detection_area': 'Export by Detection Area (Renumber sequentially)',
                     'add_detection_area': 'Add Detection Area',
                     'remove_detection_area': 'Delete Selected Detection Area',
                     'clear_detection_areas': 'Clear All Detection Areas',
@@ -1351,6 +1353,13 @@ class SpriteSplitterGUI(QMainWindow):
         transparent_layout.addWidget(self.transparent_checkbox)
         control_layout.addLayout(transparent_layout)
 
+        # 按检测区域为组导出选项
+        export_by_area_layout = QHBoxLayout()
+        self.export_by_area_checkbox = QCheckBox(self.language_dict[self.current_language]['export_by_detection_area'])
+        self.export_by_area_checkbox.setChecked(False)
+        export_by_area_layout.addWidget(self.export_by_area_checkbox)
+        control_layout.addLayout(export_by_area_layout)
+
         # 进度条
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
@@ -1509,8 +1518,24 @@ class SpriteSplitterGUI(QMainWindow):
                     if img.mode != 'RGBA':
                         img = img.convert('RGBA')
 
+                # 获取检测区域
+                detection_areas = self.canvas.get_detection_areas()
+                
                 # 分割精灵
                 base_name = os.path.splitext(os.path.basename(self.image_path))[0]
+                
+                # 检查是否按检测区域为组导出
+                export_by_area = self.export_by_area_checkbox.isChecked()
+                
+                # 为每个检测区域创建子文件夹（如果需要）
+                area_counters = {}
+                if export_by_area and detection_areas:
+                    for i, area in enumerate(detection_areas):
+                        area_folder = os.path.join(output_dir, f"A{i+1}")
+                        os.makedirs(area_folder, exist_ok=True)
+                        area_counters[i] = 0
+                
+                # 遍历所有精灵
                 for i, rect in enumerate(sprite_rects):
                     x, y, width, height = rect
                     sprite = img.crop((x, y, x + width, y + height))
@@ -1519,7 +1544,34 @@ class SpriteSplitterGUI(QMainWindow):
                     if bg_color:
                         sprite = self._make_background_transparent(sprite, bg_color)
                     
-                    output_path = os.path.join(output_dir, f"{base_name}_{i+1:04d}.png")
+                    # 确定输出路径
+                    if export_by_area and detection_areas:
+                        # 确定精灵所属的检测区域
+                        area_index = -1
+                        # 计算精灵中心点
+                        sprite_center_x = x + width / 2
+                        sprite_center_y = y + height / 2
+                        
+                        # 检查精灵中心点是否在某个检测区域内
+                        for j, area in enumerate(detection_areas):
+                            area_x, area_y, area_width, area_height = area
+                            if area_x <= sprite_center_x < area_x + area_width and area_y <= sprite_center_y < area_y + area_height:
+                                area_index = j
+                                break
+                        
+                        if area_index != -1:
+                            # 精灵属于某个检测区域，保存到对应的子文件夹
+                            area_folder = os.path.join(output_dir, f"A{area_index+1}")
+                            area_counters[area_index] += 1
+                            counter = area_counters[area_index]
+                            output_path = os.path.join(area_folder, f"{base_name}_{counter:04d}.png")
+                        else:
+                            # 精灵不属于任何检测区域，直接保存到输出目录
+                            output_path = os.path.join(output_dir, f"{base_name}_{i+1:04d}.png")
+                    else:
+                        # 不按检测区域导出，直接按序号逐一导出
+                        output_path = os.path.join(output_dir, f"{base_name}_{i+1:04d}.png")
+                    
                     sprite.save(output_path)
 
             QMessageBox.information(self, self.language_dict[self.current_language]['success'],
@@ -1709,6 +1761,7 @@ class SpriteSplitterGUI(QMainWindow):
         self.rect_count_label_text.setText(self.language_dict[lang]['sprite_count'])
         self.scale_label_text.setText(self.language_dict[lang]['scale'])
         self.transparent_checkbox.setText(self.language_dict[lang]['transparent_background'])
+        self.export_by_area_checkbox.setText(self.language_dict[lang]['export_by_detection_area'])
         
         # 更新操作提示标签
         self.operation_tip_label.setText(f"\n{self.language_dict[lang]['operation_tip']}")
