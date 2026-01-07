@@ -1519,7 +1519,7 @@ class SpriteSplitterGUI(QMainWindow):
                     if bg_color:
                         sprite = self._make_background_transparent(sprite, bg_color)
                     
-                    output_path = os.path.join(output_dir, f"{base_name}_{i:04d}.png")
+                    output_path = os.path.join(output_dir, f"{base_name}_{i+1:04d}.png")
                     sprite.save(output_path)
 
             QMessageBox.information(self, self.language_dict[self.current_language]['success'],
