@@ -188,6 +188,7 @@ class SpriteCanvas(QLabel):
         self.original_pixmap = None
         self.sprite_rects = []
         self.detection_areas = []  # 检测范围列表
+        self.detection_area_locked = []  # 检测范围锁定状态列表
         self.selected_rect_index = -1
         self.selected_area_index = -1  # 选中的检测范围索引
         self.hover_rect_index = -1
@@ -240,6 +241,7 @@ class SpriteCanvas(QLabel):
         self.set_scale(self.scale_factor)
         self.sprite_rects = []
         self.detection_areas = []  # 清空检测范围
+        self.detection_area_locked = []  # 清空锁定状态
         self.selected_rect_index = -1
         self.selected_area_index = -1
         self.hover_rect_index = -1
@@ -368,9 +370,17 @@ class SpriteCanvas(QLabel):
 
             # 绘制检测范围索引
             painter.drawText(scaled_x + 5, scaled_y + 15, f"A{i+1}")
+            
+            # 绘制锁定状态
+            if i < len(self.detection_area_locked) and self.detection_area_locked[i]:
+                # 绘制锁定图标（简单的锁形状）
+                lock_x = scaled_x + scaled_width - 20
+                lock_y = scaled_y + 5
+                painter.drawRect(lock_x, lock_y, 10, 12)
+                painter.drawRect(lock_x + 3, lock_y - 3, 4, 3)
 
-            # 如果是选中的检测范围，绘制调整大小的控制点
-            if i == self.selected_area_index:
+            # 如果是选中的检测范围且未锁定，绘制调整大小的控制点
+            if i == self.selected_area_index and (i >= len(self.detection_area_locked) or not self.detection_area_locked[i]):
                 self.draw_handles(painter, rect)
 
         # 绘制正在创建的选框
@@ -587,39 +597,44 @@ class SpriteCanvas(QLabel):
                         break
 
                 if clicked_area_index != -1:
+                    # 检查检测区域是否锁定
+                    is_locked = clicked_area_index < len(self.detection_area_locked) and self.detection_area_locked[clicked_area_index]
+                    
                     # 选中检测范围
                     self.selected_area_index = clicked_area_index
                     self.selected_rect_index = -1
                     self.hover_rect_index = -1
                     
-                    # 检查是否在调整大小的控制点上
-                    rect = self.detection_areas[self.selected_area_index]
-                    direction = self.get_resize_direction(event.pos(), rect)
-                    if direction != self.NONE:
-                        # 开始调整大小
-                        self.is_resizing = True
-                        self.resize_direction = direction
-                        self.resize_start_pos = event.pos()
-                        # 保存当前检测区域状态到撤销栈
-                        self.undo_stack.append(self.detection_areas.copy())
-                        self.original_rect = QRect(
-                            int(rect[0] * self.scale_factor),
-                            int(rect[1] * self.scale_factor),
-                            int(rect[2] * self.scale_factor),
-                            int(rect[3] * self.scale_factor)
-                        )
-                    else:
-                        # 开始拖拽移动
-                        self.is_dragging = True
-                        self.drag_start_pos = event.pos()
-                        # 保存当前检测区域状态到撤销栈
-                        self.undo_stack.append(self.detection_areas.copy())
-                        self.original_rect = QRect(
-                            int(rect[0] * self.scale_factor),
-                            int(rect[1] * self.scale_factor),
-                            int(rect[2] * self.scale_factor),
-                            int(rect[3] * self.scale_factor)
-                        )
+                    # 如果检测区域未锁定，允许调整大小和拖拽
+                    if not is_locked:
+                        # 检查是否在调整大小的控制点上
+                        rect = self.detection_areas[self.selected_area_index]
+                        direction = self.get_resize_direction(event.pos(), rect)
+                        if direction != self.NONE:
+                            # 开始调整大小
+                            self.is_resizing = True
+                            self.resize_direction = direction
+                            self.resize_start_pos = event.pos()
+                            # 保存当前检测区域状态到撤销栈
+                            self.undo_stack.append(self.detection_areas.copy())
+                            self.original_rect = QRect(
+                                int(rect[0] * self.scale_factor),
+                                int(rect[1] * self.scale_factor),
+                                int(rect[2] * self.scale_factor),
+                                int(rect[3] * self.scale_factor)
+                            )
+                        else:
+                            # 开始拖拽移动
+                            self.is_dragging = True
+                            self.drag_start_pos = event.pos()
+                            # 保存当前检测区域状态到撤销栈
+                            self.undo_stack.append(self.detection_areas.copy())
+                            self.original_rect = QRect(
+                                int(rect[0] * self.scale_factor),
+                                int(rect[1] * self.scale_factor),
+                                int(rect[2] * self.scale_factor),
+                                int(rect[3] * self.scale_factor)
+                            )
                     
                     self.update()
                     # 发射检测范围选择信号
@@ -898,6 +913,7 @@ class SpriteCanvas(QLabel):
         """删除选中的检测范围"""
         if self.selected_area_index != -1:
             del self.detection_areas[self.selected_area_index]
+            del self.detection_area_locked[self.selected_area_index]
             self.selected_area_index = -1
             self.hover_area_index = -1
             self.update()
@@ -911,6 +927,7 @@ class SpriteCanvas(QLabel):
     def add_detection_area(self, rect):
         """添加新的检测范围"""
         self.detection_areas.append(rect)
+        self.detection_area_locked.append(False)  # 默认未锁定
         self.update()
 
     def get_detection_areas(self):
@@ -1245,6 +1262,12 @@ class SpriteSplitterGUI(QMainWindow):
         self.remove_detection_area_btn.setEnabled(False)  # 初始禁用
         main_buttons_layout.addWidget(self.remove_detection_area_btn)
 
+        # 锁定/解锁检测区域按钮
+        self.lock_detection_area_btn = QPushButton(self.language_dict[self.current_language]['lock_detection_area'])
+        self.lock_detection_area_btn.clicked.connect(self.toggle_detection_area_lock)
+        self.lock_detection_area_btn.setEnabled(False)  # 初始禁用
+        main_buttons_layout.addWidget(self.lock_detection_area_btn)
+
         self.clear_detection_areas_btn = QPushButton(self.language_dict[self.current_language]['clear_detection_areas'])
         self.clear_detection_areas_btn.clicked.connect(self.clear_detection_areas)
         main_buttons_layout.addWidget(self.clear_detection_areas_btn)
@@ -1410,12 +1433,48 @@ class SpriteSplitterGUI(QMainWindow):
         self.progress_bar.setValue(0)
 
         # 获取检测范围
-        detection_areas = self.canvas.get_detection_areas()
+        all_detection_areas = self.canvas.get_detection_areas()
+        
+        # 过滤出未锁定的检测区域
+        detection_areas = []
+        locked_areas = []
+        for i, area in enumerate(all_detection_areas):
+            # 检查检测区域是否锁定
+            is_locked = i < len(self.canvas.detection_area_locked) and self.canvas.detection_area_locked[i]
+            if not is_locked:
+                detection_areas.append(area)
+            else:
+                locked_areas.append(area)
+
+        # 保存锁定区域的精灵
+        locked_sprites = []
+        if locked_areas:
+            current_sprites = self.canvas.sprite_rects
+            for sprite in current_sprites:
+                # 计算精灵中心点
+                sprite_center_x = sprite[0] + sprite[2] / 2
+                sprite_center_y = sprite[1] + sprite[3] / 2
+                
+                # 检查精灵是否在锁定区域内
+                for area in locked_areas:
+                    area_x, area_y, area_width, area_height = area
+                    if area_x <= sprite_center_x < area_x + area_width and area_y <= sprite_center_y < area_y + area_height:
+                        locked_sprites.append(sprite)
+                        break
+
+        # 检查是否有未锁定的区域需要检测
+        if not detection_areas:
+            # 所有区域都被锁定，提示用户
+            self.progress_bar.setVisible(False)
+            QMessageBox.information(self, self.language_dict[self.current_language]['success'],
+                                   self.language_dict[self.current_language]['all_areas_locked'])
+            return
 
         # 创建精灵检测器
         self.sprite_detector = SpriteDetector(self.image_path, threshold=self.threshold_spin.value(), detection_areas=detection_areas)
         self.sprite_detector.progress_updated.connect(self.update_progress)
-        self.sprite_detector.detection_finished.connect(self.on_detection_finished)
+        # 传递锁定区域的精灵，以便在检测完成后合并
+        self.sprite_detector.detection_finished.connect(lambda rects: self.on_detection_finished(rects, locked_sprites))
 
         # 在新线程中执行检测，避免阻塞UI
         self.detection_thread = QThread()
@@ -1427,7 +1486,7 @@ class SpriteSplitterGUI(QMainWindow):
         """更新进度条"""
         self.progress_bar.setValue(value)
 
-    def on_detection_finished(self, rects):
+    def on_detection_finished(self, rects, locked_sprites=None):
         """检测完成处理"""
         self.progress_bar.setVisible(False)
         
@@ -1478,13 +1537,20 @@ class SpriteSplitterGUI(QMainWindow):
             
             rects = sorted_rects
         
-        self.canvas.set_sprite_rects(rects)
-        self.rect_count_label.setText(str(len(rects)))
+        # 合并锁定区域的精灵和新检测的精灵
+        if locked_sprites:
+            # 合并精灵列表
+            all_sprites = locked_sprites + rects
+        else:
+            all_sprites = rects
+        
+        self.canvas.set_sprite_rects(all_sprites)
+        self.rect_count_label.setText(str(len(all_sprites)))
         self.detection_thread.quit()
         self.detection_thread.wait()
 
         QMessageBox.information(self, self.language_dict[self.current_language]['success'],
-                               self.language_dict[self.current_language]['detection_completed'].format(len(rects)))
+                               self.language_dict[self.current_language]['detection_completed'].format(len(all_sprites)))
 
 
 
@@ -1645,8 +1711,9 @@ class SpriteSplitterGUI(QMainWindow):
 
     def on_detection_area_selected(self, indexes):
         """处理检测范围选择信号"""
-        # 启用或禁用删除检测范围按钮
+        # 启用或禁用删除检测范围按钮和锁定/解锁按钮
         self.remove_detection_area_btn.setEnabled(len(indexes) > 0)
+        self.lock_detection_area_btn.setEnabled(len(indexes) > 0)
 
     def toggle_drawing_mode(self, checked):
         """切换绘制模式"""
@@ -1685,19 +1752,35 @@ class SpriteSplitterGUI(QMainWindow):
         self.canvas.update()
         self.rect_count_label.setText("0")
         self.remove_rect_btn.setEnabled(False)
+        self.lock_detection_area_btn.setEnabled(False)
 
     def remove_selected_detection_area(self):
         """删除选中的检测范围"""
         self.canvas.remove_selected_detection_area()
         self.remove_detection_area_btn.setEnabled(False)
+        self.lock_detection_area_btn.setEnabled(False)
 
     def clear_detection_areas(self):
         """清除所有检测范围"""
         self.canvas.detection_areas = []
+        self.canvas.detection_area_locked = []  # 清空锁定状态
         self.canvas.selected_area_index = -1
         self.canvas.hover_area_index = -1
         self.canvas.update()
         self.remove_detection_area_btn.setEnabled(False)
+        self.lock_detection_area_btn.setEnabled(False)
+
+    def toggle_detection_area_lock(self):
+        """切换检测区域的锁定状态"""
+        if self.canvas.selected_area_index != -1:
+            area_index = self.canvas.selected_area_index
+            # 确保锁定状态列表长度足够
+            while len(self.canvas.detection_area_locked) <= area_index:
+                self.canvas.detection_area_locked.append(False)
+            # 切换锁定状态
+            self.canvas.detection_area_locked[area_index] = not self.canvas.detection_area_locked[area_index]
+            # 更新UI
+            self.canvas.update()
 
     def on_canvas_scale_changed(self, scale):
         """处理画布缩放变化信号，更新UI控件"""
@@ -1748,6 +1831,7 @@ class SpriteSplitterGUI(QMainWindow):
         self.remove_rect_btn.setText(self.language_dict[lang]['remove_rect'])
         self.add_detection_area_btn.setText(self.language_dict[lang]['add_detection_area'])
         self.remove_detection_area_btn.setText(self.language_dict[lang]['remove_detection_area'])
+        self.lock_detection_area_btn.setText(self.language_dict[lang]['lock_detection_area'])
         self.clear_detection_areas_btn.setText(self.language_dict[lang]['clear_detection_areas'])
         self.start_split_btn.setText(self.language_dict[lang]['start_split'])
         self.browse_btn.setText(self.language_dict[lang]['browse'])
