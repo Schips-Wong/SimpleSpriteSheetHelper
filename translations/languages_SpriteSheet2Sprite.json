@@ -31,8 +31,10 @@
         "export_by_detection_area": "按检测区域为组导出（序号重新编号）",
         "add_detection_area": "添加检测范围",
         "remove_detection_area": "删除选中检测范围",
+        "lock_detection_area": "锁定/解锁检测区域",
         "clear_detection_areas": "清除所有检测范围",
-        "operation_tip": "按住 Shift 键 并点击鼠标可交换精灵之间的序号"
+        "operation_tip": "按住 Shift 键 并点击鼠标可交换精灵之间的序号",
+        "all_areas_locked": "所有检测区域都已锁定，没有区域需要检测"
     },
     "en_US": {
         "window_title": "Smart Sprite Splitter",
@@ -66,7 +68,9 @@
         "export_by_detection_area": "Export by Detection Area (Renumber sequentially)",
         "add_detection_area": "Add Detection Area",
         "remove_detection_area": "Delete Selected Detection Area",
+        "lock_detection_area": "Lock/Unlock Detection Area",
         "clear_detection_areas": "Clear All Detection Areas",
-        "operation_tip": "Hold Shift key + click twice on sprites\nTo swap sprite indexes"
+        "operation_tip": "Hold Shift key + click twice on sprites\nTo swap sprite indexes",
+        "all_areas_locked": "All detection areas are locked, no areas need to be detected"
     }
 }
