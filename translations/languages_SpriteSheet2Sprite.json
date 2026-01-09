@@ -8,6 +8,7 @@
         "add_rect": "添加选框",
         "remove_rect": "删除选中边框",
         "clear_all_rects": "清除所有边框",
+        "clear_unlocked_rects": "清除所有边框（锁定区域内除外）",
         "start_split": "导出分割结果",
         "control_options": "控制选项",
         "auto_detection_threshold": "自动检测阈值:",
@@ -32,6 +33,7 @@
         "add_detection_area": "添加检测范围",
         "remove_detection_area": "删除选中检测范围",
         "lock_detection_area": "锁定/解锁检测区域",
+        "clear_unlocked_areas": "清除所有区域（锁定区域除外）",
         "clear_detection_areas": "清除所有检测范围",
         "operation_tip": "按住 Shift 键 并点击鼠标可交换精灵之间的序号",
         "all_areas_locked": "所有检测区域都已锁定，没有区域需要检测"
@@ -45,6 +47,7 @@
         "add_rect": "Add Rectangle",
         "remove_rect": "Delete Selected Rectangle",
         "clear_all_rects": "Clear All Rectangles",
+        "clear_unlocked_rects": "Clear All Rectangles (Except Locked Areas)",
         "start_split": "Export Splitting Results",
         "control_options": "Control Options",
         "auto_detection_threshold": "Auto Detection Threshold:",
@@ -69,6 +72,7 @@
         "add_detection_area": "Add Detection Area",
         "remove_detection_area": "Delete Selected Detection Area",
         "lock_detection_area": "Lock/Unlock Detection Area",
+        "clear_unlocked_areas": "Clear All Areas (Except Locked)",
         "clear_detection_areas": "Clear All Detection Areas",
         "operation_tip": "Hold Shift key + click twice on sprites\nTo swap sprite indexes",
         "all_areas_locked": "All detection areas are locked, no areas need to be detected"

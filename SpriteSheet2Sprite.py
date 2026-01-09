@@ -1293,6 +1293,12 @@ class SpriteSplitterGUI(QMainWindow):
         self.clear_all_rects_btn.clicked.connect(self.clear_all_rects)
         main_buttons_layout.addWidget(self.clear_all_rects_btn)
 
+        # 清除所有边框（锁定区域内除外）按钮
+        self.clear_unlocked_rects_btn = QPushButton(self.language_dict[self.current_language]['clear_unlocked_rects'])
+        self.clear_unlocked_rects_btn.clicked.connect(self.clear_unlocked_rects)
+        self.clear_unlocked_rects_btn.setEnabled(False)  # 初始禁用
+        main_buttons_layout.addWidget(self.clear_unlocked_rects_btn)
+
         # 添加操作提示标签
         self.operation_tip_label = QLabel(self.language_dict[self.current_language]['operation_tip'])
         self.operation_tip_label.setStyleSheet("color: #666; background-color: #f5f5f5; padding: 8px; border-radius: 4px;")
@@ -1411,6 +1417,7 @@ class SpriteSplitterGUI(QMainWindow):
             self.image_path_label.setText(file_path)
             self.canvas.set_image(file_path)
             self.add_detection_area_btn.setEnabled(True)
+            self.clear_unlocked_rects_btn.setEnabled(True)
 
     def browse_output_dir(self):
         """浏览输出目录"""
@@ -1698,7 +1705,7 @@ class SpriteSplitterGUI(QMainWindow):
 
     def on_rect_selected(self, index):
         """处理矩形选中信号"""
-        # 启用或禁用删除按钮
+        # 启用或禁用删除按钮和清除所有边框（锁定区域内除外）按钮
         self.remove_rect_btn.setEnabled(index != -1)
 
     def on_rect_updated(self):
@@ -1752,7 +1759,6 @@ class SpriteSplitterGUI(QMainWindow):
         self.canvas.update()
         self.rect_count_label.setText("0")
         self.remove_rect_btn.setEnabled(False)
-        self.lock_detection_area_btn.setEnabled(False)
 
     def remove_selected_detection_area(self):
         """删除选中的检测范围"""
@@ -1829,9 +1835,12 @@ class SpriteSplitterGUI(QMainWindow):
         self.detect_sprites_btn.setText(self.language_dict[lang]['detect_sprites'])
         self.add_rect_btn.setText(self.language_dict[lang]['add_rect'])
         self.remove_rect_btn.setText(self.language_dict[lang]['remove_rect'])
+        self.clear_all_rects_btn.setText(self.language_dict[lang]['clear_all_rects'])
+        self.clear_unlocked_rects_btn.setText(self.language_dict[lang]['clear_unlocked_rects'])
         self.add_detection_area_btn.setText(self.language_dict[lang]['add_detection_area'])
         self.remove_detection_area_btn.setText(self.language_dict[lang]['remove_detection_area'])
         self.lock_detection_area_btn.setText(self.language_dict[lang]['lock_detection_area'])
+        self.clear_unlocked_areas_btn.setText(self.language_dict[lang]['clear_unlocked_areas'])
         self.clear_detection_areas_btn.setText(self.language_dict[lang]['clear_detection_areas'])
         self.start_split_btn.setText(self.language_dict[lang]['start_split'])
         self.browse_btn.setText(self.language_dict[lang]['browse'])
@@ -1849,6 +1858,50 @@ class SpriteSplitterGUI(QMainWindow):
         
         # 更新操作提示标签
         self.operation_tip_label.setText(f"\n{self.language_dict[lang]['operation_tip']}")
+
+    def clear_unlocked_rects(self):
+        """清除所有未锁定区域内的精灵边框"""
+        # 获取锁定的检测区域
+        locked_areas = []
+        for i, area in enumerate(self.canvas.detection_areas):
+            # 检查检测区域是否锁定
+            is_locked = i < len(self.canvas.detection_area_locked) and self.canvas.detection_area_locked[i]
+            if is_locked:
+                locked_areas.append(area)
+        
+        # 保存锁定区域内的精灵
+        locked_rects = []
+        for sprite in self.canvas.sprite_rects:
+            # 计算精灵中心点
+            sprite_center_x = sprite[0] + sprite[2] / 2
+            sprite_center_y = sprite[1] + sprite[3] / 2
+            
+            # 检查精灵是否在锁定区域内
+            in_locked_area = False
+            for area in locked_areas:
+                area_x, area_y, area_width, area_height = area
+                if area_x <= sprite_center_x < area_x + area_width and area_y <= sprite_center_y < area_y + area_height:
+                    in_locked_area = True
+                    break
+            
+            # 如果精灵在锁定区域内，保留它
+            if in_locked_area:
+                locked_rects.append(sprite)
+        
+        # 更新精灵列表
+        self.canvas.sprite_rects = locked_rects
+        
+        # 清除选中状态
+        self.canvas.selected_rect_index = -1
+        self.canvas.hover_rect_index = -1
+        self.canvas.rect_selected.emit(-1)
+        
+        # 更新UI
+        self.canvas.update()
+        self.rect_count_label.setText(str(len(locked_rects)))
+        
+        # 禁用删除按钮
+        self.remove_rect_btn.setEnabled(False)
 
 
 
