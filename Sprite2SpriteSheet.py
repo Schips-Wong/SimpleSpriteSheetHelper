@@ -1969,10 +1969,14 @@ class SpriteAlignerGUI(QMainWindow):
             # 计算拖动偏移量
             delta = event.pos() - self.last_pos
             
-            # 更新偏移量
+            # 更新偏移量（考虑缩放因子）
             if 0 <= self.selected_index < len(self.images_data):
-                self.images_data[self.selected_index]['offset_x'] += delta.x()
-                self.images_data[self.selected_index]['offset_y'] += delta.y()
+                # 将鼠标移动的像素值除以缩放因子，得到原始像素偏移量
+                adjusted_delta_x = int(delta.x() / self.zoom_factor)
+                adjusted_delta_y = int(delta.y() / self.zoom_factor)
+                
+                self.images_data[self.selected_index]['offset_x'] += adjusted_delta_x
+                self.images_data[self.selected_index]['offset_y'] += adjusted_delta_y
                 
                 # 更新控件值
                 self.x_spin.setValue(self.images_data[self.selected_index]['offset_x'])
