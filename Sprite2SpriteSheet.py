@@ -1864,7 +1864,7 @@ class SpriteAlignerGUI(QMainWindow):
     def apply_auto_align(self):
         """应用自动对齐到当前图片"""
         align_type = self.auto_align_combo.currentText()
-        if align_type == "无" or self.selected_index < 0:
+        if align_type == self.language_dict[self.current_language]['none'] or self.selected_index < 0:
             return
         
         # 获取当前图片数据
@@ -1931,23 +1931,23 @@ class SpriteAlignerGUI(QMainWindow):
         """计算对齐偏移量"""
         # 重新计算对齐逻辑，确保所有对齐都基于图片中心点
         # 工作区中心点是参考点，图片中心点需要对齐到特定位置
-        if align_type == "中心对齐":
+        if align_type == self.language_dict[self.current_language]['center_align']:
             # 图片中心点精确对齐到工作区中心点
             offset_x = 0
             offset_y = 0
-        elif align_type == "左对齐":
+        elif align_type == self.language_dict[self.current_language]['left_align']:
             # 图片中心点对齐到工作区中心点左侧，距离为图片宽度的一半
             offset_x = -img_width // 2
             offset_y = 0
-        elif align_type == "右对齐":
+        elif align_type == self.language_dict[self.current_language]['right_align']:
             # 图片中心点对齐到工作区中心点右侧，距离为图片宽度的一半
             offset_x = img_width // 2
             offset_y = 0
-        elif align_type == "上对齐" or align_type == "顶部对齐":
+        elif align_type == self.language_dict[self.current_language]['top_align']:
             # 图片中心点对齐到工作区中心点上方，距离为图片高度的一半
             offset_x = 0
             offset_y = -img_height // 2
-        elif align_type == "下对齐" or align_type == "底部对齐":
+        elif align_type == self.language_dict[self.current_language]['bottom_align']:
             # 图片中心点对齐到工作区中心点下方，距离为图片高度的一半
             offset_x = 0
             offset_y = img_height // 2
@@ -2166,19 +2166,20 @@ class SpriteAlignerGUI(QMainWindow):
                     center_y = cell_center_y + offset_y
                     
                     # 计算图片左上角和右下角坐标
+                    # 使用与工作区显示相同的逻辑：中心点对齐 + 偏移量
                     # 如果用户指定了单个图片大小，使用指定大小，否则使用原始图片大小
                     if single_width > 0 and single_height > 0:
                         # 使用用户指定的大小计算坐标
-                        img_left = center_x - single_width // 2
-                        img_top = center_y - single_height // 2
-                        img_right = center_x + single_width // 2
-                        img_bottom = center_y + single_height // 2
+                        img_left = center_x - single_width // 2 + offset_x
+                        img_top = center_y - single_height // 2 + offset_y
+                        img_right = center_x + single_width // 2 + offset_x
+                        img_bottom = center_y + single_height // 2 + offset_y
                     else:
                         # 使用原始图片大小计算坐标
-                        img_left = center_x - orig_width // 2
-                        img_top = center_y - orig_height // 2
-                        img_right = center_x + orig_width // 2
-                        img_bottom = center_y + orig_height // 2
+                        img_left = center_x - orig_width // 2 + offset_x
+                        img_top = center_y - orig_height // 2 + offset_y
+                        img_right = center_x + orig_width // 2 + offset_x
+                        img_bottom = center_y + orig_height // 2 + offset_y
                     
                     # 更新全局坐标范围
                     min_x = min(min_x, img_left)
