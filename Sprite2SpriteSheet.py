@@ -18,11 +18,12 @@ from PIL import Image
 class AdvancedImageFileDialog(QDialog):
     """高级图片文件选择对话框，支持多目录选择"""
     
-    def __init__(self, parent=None, language_dict=None, current_language='zh_CN'):
+    def __init__(self, parent=None, language_dict=None, current_language='zh_CN', initial_path=None):
         super().__init__(parent)
         self.selected_directories = []
         self.language_dict = language_dict or self.load_default_language_dict()
         self.current_language = current_language
+        self.initial_path = initial_path or "."
         self.setup_ui()
     
     def load_default_language_dict(self):
@@ -117,7 +118,7 @@ class AdvancedImageFileDialog(QDialog):
         
         self.address_bar = QLineEdit()
         self.address_bar.setPlaceholderText(self.language_dict[self.current_language]['enter_path_or_browse'])
-        self.address_bar.returnPressed.connect(self.navigate_to_address)
+        self.address_bar.textEdited.connect(self.navigate_to_address)
         address_layout.addWidget(self.address_bar)
         
         self.browse_btn = QPushButton(self.language_dict[self.current_language]['browse'])
@@ -490,8 +491,6 @@ class AdvancedImageFileDialog(QDialog):
         path = self.address_bar.text().strip()
         if path and os.path.isdir(path):
             self.navigate_to_directory(path)
-        else:
-            QMessageBox.warning(self, "错误", "路径不存在或不是目录")
     
     def browse_directory(self):
         """浏览目录对话框"""
@@ -508,9 +507,12 @@ class AdvancedImageFileDialog(QDialog):
                 self.navigate_to_directory(parent_path)
     
     def navigate_to_program_dir(self):
-        """导航到程序所在目录"""
-        program_dir = os.path.dirname(os.path.abspath(__file__))
-        self.navigate_to_directory(program_dir)
+        """导航到程序所在目录或初始路径"""
+        if self.initial_path and os.path.exists(self.initial_path):
+            self.navigate_to_directory(self.initial_path)
+        else:
+            program_dir = os.path.dirname(os.path.abspath(__file__))
+            self.navigate_to_directory(program_dir)
     
     def navigate_to_directory(self, directory_path):
         """导航到指定目录"""
@@ -555,6 +557,10 @@ class SpriteAlignerGUI(QMainWindow):
         self.min_zoom = 0.1  # 最小缩放比例
         self.max_zoom = 5.0  # 最大缩放比例
         self.current_image_visible = True  # 当前图片是否可见
+        # 路径记忆功能
+        self.last_selected_path = "."  # 默认当前目录
+        self.config_file = os.path.join("config", "sprite_aligner_config.json")
+        self.load_config()
         # 然后调用init_ui
         self.init_ui()
     
@@ -689,6 +695,47 @@ class SpriteAlignerGUI(QMainWindow):
                     'import_offset': 'Import Offset Settings'
                 }
             }
+    
+    def load_config(self):
+        """加载配置文件"""
+        try:
+            # 确保配置目录存在
+            config_dir = os.path.dirname(self.config_file)
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+            
+            # 如果配置文件存在，则加载
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    self.last_selected_path = config.get('last_selected_path', '.')
+        except Exception as e:
+            print(f"加载配置失败: {e}")
+            # 使用默认值
+            self.last_selected_path = "."
+    
+    def save_config(self):
+        """保存配置文件"""
+        try:
+            # 确保配置目录存在
+            config_dir = os.path.dirname(self.config_file)
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+            
+            config = {
+                'last_selected_path': self.last_selected_path
+            }
+            
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"保存配置失败: {e}")
+    
+    def update_last_selected_path(self, path):
+        """更新最后选择的路径"""
+        if path and os.path.exists(os.path.dirname(path)):
+            self.last_selected_path = os.path.dirname(path)
+            self.save_config()
         
     def switch_language(self):
         """切换语言"""
@@ -1261,19 +1308,26 @@ class SpriteAlignerGUI(QMainWindow):
             dialog.setWindowTitle(self.language_dict[self.current_language]['select_split_images'])
             dialog.setFileMode(QFileDialog.ExistingFiles)
             dialog.setNameFilter("Images (*.png *.jpg *.jpeg *.bmp *.gif)")
+            dialog.setDirectory(self.last_selected_path)
             
             if dialog.exec_():
                 selected_files = dialog.selectedFiles()
                 if selected_files:
+                    # 更新最后选择的路径
+                    if selected_files:
+                        self.update_last_selected_path(selected_files[0])
                     self.process_imported_items(selected_files, is_files=True)
         elif clicked_btn == folder_btn:
             # 文件夹方式导入
             # 创建自定义文件选择对话框
-            dialog = AdvancedImageFileDialog(self, self.language_dict, self.current_language)
+            dialog = AdvancedImageFileDialog(self, self.language_dict, self.current_language, self.last_selected_path)
             dialog.setWindowTitle(self.language_dict[self.current_language]['select_split_images'])
             if dialog.exec_():
                 selected_folders = dialog.selectedFiles()
                 if selected_folders:
+                    # 更新最后选择的路径
+                    if selected_folders:
+                        self.update_last_selected_path(selected_folders[0])
                     self.process_imported_items(selected_folders, is_files=False)
     
     def process_imported_items(self, items, is_files):
@@ -2273,10 +2327,12 @@ class SpriteAlignerGUI(QMainWindow):
                 
                 # 打开文件保存对话框
                 file_path, _ = QFileDialog.getSaveFileName(
-                    self, "保存拼接结果", ".", "PNG Files (*.png);;All Files (*)"
+                    self, "保存拼接结果", self.last_selected_path, "PNG Files (*.png);;All Files (*)"
                 )
                 
                 if file_path:
+                    # 更新最后选择的路径
+                    self.update_last_selected_path(file_path)
                     # 保存拼接结果
                     stitch_img.save(file_path, 'PNG')
                     QMessageBox.information(self, "成功", f"拼接结果已保存到：{file_path}")
@@ -2303,10 +2359,12 @@ class SpriteAlignerGUI(QMainWindow):
             
             # 打开文件保存对话框
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "导出偏移设置", ".", "JSON Files (*.json);;All Files (*)"
+                self, "导出偏移设置", self.last_selected_path, "JSON Files (*.json);;All Files (*)"
             )
             
             if file_path:
+                # 更新最后选择的路径
+                self.update_last_selected_path(file_path)
                 # 将偏移数据保存到JSON文件
                 with open(file_path, 'w', encoding='utf-8') as f:
                     json.dump(offset_data, f, ensure_ascii=False, indent=4)
@@ -2324,10 +2382,12 @@ class SpriteAlignerGUI(QMainWindow):
         try:
             # 打开文件选择对话框
             file_path, _ = QFileDialog.getOpenFileName(
-                self, "导入偏移设置", ".", "JSON Files (*.json);;All Files (*)"
+                self, "导入偏移设置", self.last_selected_path, "JSON Files (*.json);;All Files (*)"
             )
             
             if file_path:
+                # 更新最后选择的路径
+                self.update_last_selected_path(file_path)
                 # 从JSON文件加载偏移数据
                 with open(file_path, 'r', encoding='utf-8') as f:
                     offset_data = json.load(f)
