@@ -1873,15 +1873,17 @@ class SpriteAlignerGUI(QMainWindow):
         img_height = img_data['height']
         
         # 计算偏移量
-        offset_x, offset_y = self.calculate_align_offset(img_width, img_height, align_type)
+        offset_x, offset_y, update_x, update_y = self.calculate_align_offset(img_width, img_height, align_type)
         
-        # 更新偏移量
-        self.images_data[self.selected_index]['offset_x'] = offset_x
-        self.images_data[self.selected_index]['offset_y'] = offset_y
+        # 更新偏移量（只更新相关方向）
+        if update_x:
+            self.images_data[self.selected_index]['offset_x'] = offset_x
+        if update_y:
+            self.images_data[self.selected_index]['offset_y'] = offset_y
         
         # 更新控件值
-        self.x_spin.setValue(offset_x)
-        self.y_spin.setValue(offset_y)
+        self.x_spin.setValue(self.images_data[self.selected_index]['offset_x'])
+        self.y_spin.setValue(self.images_data[self.selected_index]['offset_y'])
         
         # 更新工作区显示
         self.update_workspace()
@@ -1909,11 +1911,13 @@ class SpriteAlignerGUI(QMainWindow):
                 img_height = img_data['height']
                 
                 # 计算偏移量
-                offset_x, offset_y = self.calculate_align_offset(img_width, img_height, align_type)
+                offset_x, offset_y, update_x, update_y = self.calculate_align_offset(img_width, img_height, align_type)
                 
-                # 更新偏移量
-                self.images_data[i]['offset_x'] = offset_x
-                self.images_data[i]['offset_y'] = offset_y
+                # 更新偏移量（只更新相关方向）
+                if update_x:
+                    self.images_data[i]['offset_x'] = offset_x
+                if update_y:
+                    self.images_data[i]['offset_y'] = offset_y
             
             # 更新当前选中图片的控件值
             if self.selected_index >= 0 and self.selected_index < len(self.images_data):
@@ -1931,31 +1935,44 @@ class SpriteAlignerGUI(QMainWindow):
         """计算对齐偏移量"""
         # 重新计算对齐逻辑，确保所有对齐都基于图片中心点
         # 工作区中心点是参考点，图片中心点需要对齐到特定位置
+        offset_x = 0
+        offset_y = 0
+        update_x = False
+        update_y = False
+        
         if align_type == self.language_dict[self.current_language]['center_align']:
             # 图片中心点精确对齐到工作区中心点
             offset_x = 0
             offset_y = 0
+            update_x = True
+            update_y = True
         elif align_type == self.language_dict[self.current_language]['left_align']:
             # 图片中心点对齐到工作区中心点左侧，距离为图片宽度的一半
             offset_x = -img_width // 2
-            offset_y = 0
+            update_x = True
+            update_y = False
         elif align_type == self.language_dict[self.current_language]['right_align']:
             # 图片中心点对齐到工作区中心点右侧，距离为图片宽度的一半
             offset_x = img_width // 2
-            offset_y = 0
+            update_x = True
+            update_y = False
         elif align_type == self.language_dict[self.current_language]['top_align']:
             # 图片中心点对齐到工作区中心点上方，距离为图片高度的一半
-            offset_x = 0
             offset_y = -img_height // 2
+            update_x = False
+            update_y = True
         elif align_type == self.language_dict[self.current_language]['bottom_align']:
             # 图片中心点对齐到工作区中心点下方，距离为图片高度的一半
-            offset_x = 0
             offset_y = img_height // 2
+            update_x = False
+            update_y = True
         else:
             offset_x = 0
             offset_y = 0
+            update_x = False
+            update_y = False
         
-        return offset_x, offset_y
+        return offset_x, offset_y, update_x, update_y
     
     def workspace_click(self, event):
         """工作区鼠标点击事件"""
