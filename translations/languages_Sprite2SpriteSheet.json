@@ -92,7 +92,19 @@
         "import_by_folders": "导入多目录(多组)",
         "stitch_by_group": "按组拼接(每组占据一行)",
         "export_offset": "导出偏移设置",
-        "import_offset": "导入偏移设置"
+        "import_offset": "导入偏移设置",
+        "export_failed": "导出失败: {0}",
+        "import_failed": "导入失败: {0}",
+        "import_success": "应用了 {0} 个偏移设置",
+        "save_failed": "保存失败: {0}",
+        "save_stitch_result": "保存拼接结果",
+        "stitch_result_saved": "拼接结果已保存到: {0}",
+        "stitch_failed": "拼接失败: {0}",
+        "export_success": "偏移设置已导出到: {0}",
+        "no_images_to_export": "没有图片数据可导出",
+        "please_import_images": "请先导入图片",
+        "batch_align_success": "已将 '{0}' 应用到所有 {1} 张图片",
+        "stitch_preview": "拼接结果预览"
     },
     "en_US": {
         "window_title": "Sprite Aligner",
@@ -187,6 +199,18 @@
         "import_by_folders": "Import Multi-Directory (Multi-Group)",
         "stitch_by_group": "Stitch by Group (Each group occupies a row)",
         "export_offset": "Export Offset Settings",
-        "import_offset": "Import Offset Settings"
+        "import_offset": "Import Offset Settings",
+        "export_failed": "Export failed: {0}",
+        "import_failed": "Import failed: {0}",
+        "import_success": "Applied {0} offset settings",
+        "save_failed": "Save failed: {0}",
+        "save_stitch_result": "Save Stitch Result",
+        "stitch_result_saved": "Stitch result saved to: {0}",
+        "stitch_failed": "Stitch failed: {0}",
+        "export_success": "Offset settings exported to: {0}",
+        "no_images_to_export": "No image data to export",
+        "please_import_images": "Please import images first",
+        "batch_align_success": "Applied '{0}' to all {1} images",
+        "stitch_preview": "Stitch Result Preview"
     }
 }

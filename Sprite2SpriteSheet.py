@@ -24,6 +24,10 @@ class AdvancedImageFileDialog(QDialog):
         self.language_dict = language_dict or self.load_default_language_dict()
         self.current_language = current_language
         self.initial_path = initial_path or "."
+
+        # 确保语言字典包含必要的键
+        self.ensure_language_keys()
+
         self.setup_ui()
     
     def load_default_language_dict(self):
@@ -57,6 +61,7 @@ class AdvancedImageFileDialog(QDialog):
                 'path_not_exist': '路径不存在或不是目录',
                 'select_directory': '选择目录',
                 'cannot_navigate': '无法导航到目录: {0}',
+                'file_info_selected': '已选择 {0} 个目录，共 {1} 个文件',
                 'all_images': '所有图片 (*.png *.jpg *.jpeg *.bmp *.gif)',
                 'png_images': 'PNG 图片 (*.png)',
                 'jpeg_images': 'JPEG 图片 (*.jpg *.jpeg)',
@@ -92,6 +97,7 @@ class AdvancedImageFileDialog(QDialog):
                 'path_not_exist': 'Path does not exist or is not a directory',
                 'select_directory': 'Select Directory',
                 'cannot_navigate': 'Cannot navigate to directory: {0}',
+                'file_info_selected': 'Selected {0} directories, total {1} files',
                 'all_images': 'All images (*.png *.jpg *.jpeg *.bmp *.gif)',
                 'png_images': 'PNG images (*.png)',
                 'jpeg_images': 'JPEG images (*.jpg *.jpeg)',
@@ -101,6 +107,19 @@ class AdvancedImageFileDialog(QDialog):
             }
         }
 
+    def ensure_language_keys(self):
+        """确保语言字典包含所有必要的键"""
+        for lang in ['zh_CN', 'en_US']:
+            if lang not in self.language_dict:
+                continue
+            
+            # 确保包含 file_info_selected 键
+            if 'file_info_selected' not in self.language_dict[lang]:
+                if lang == 'zh_CN':
+                    self.language_dict[lang]['file_info_selected'] = '已选择 {0} 个目录，共 {1} 个文件'
+                else:
+                    self.language_dict[lang]['file_info_selected'] = 'Selected {0} directories, total {1} files'
+    
     def setup_ui(self):
         """设置界面"""
         self.setWindowTitle(self.language_dict[self.current_language]['select_image_directories'])
@@ -452,7 +471,11 @@ class AdvancedImageFileDialog(QDialog):
         self.file_list.clear()
         
         if not self.selected_directories:
-            self.file_info_label.setText("已选择 0 个目录，共 0 个文件")
+            try:
+                self.file_info_label.setText(self.language_dict[self.current_language]['file_info_selected'].format(0, 0))
+            except Exception as e:
+                print(f"更新文件列表错误: {e}")
+                raise
             return
         
         # 收集所有图片文件
@@ -479,7 +502,7 @@ class AdvancedImageFileDialog(QDialog):
         for file_path in all_files:
             self.file_list.addItem(os.path.basename(file_path))
         
-        self.file_info_label.setText(f"已选择 {len(self.selected_directories)} 个目录，共 {len(all_files)} 个文件")
+        self.file_info_label.setText(self.language_dict[self.current_language]['file_info_selected'].format(len(self.selected_directories), len(all_files)))
     
     def is_image_file(self, filename):
         """检查文件是否为图片文件"""
@@ -494,7 +517,7 @@ class AdvancedImageFileDialog(QDialog):
     
     def browse_directory(self):
         """浏览目录对话框"""
-        directory = QFileDialog.getExistingDirectory(self, "选择目录", self.address_bar.text())
+        directory = QFileDialog.getExistingDirectory(self, self.language_dict[self.current_language]['select_directory'], self.address_bar.text())
         if directory:
             self.navigate_to_directory(directory)
     
@@ -517,6 +540,8 @@ class AdvancedImageFileDialog(QDialog):
     def navigate_to_directory(self, directory_path):
         """导航到指定目录"""
         try:
+            if not os.path.exists(directory_path):
+                return
             # 更新地址栏
             self.address_bar.setText(directory_path)
             
@@ -527,7 +552,11 @@ class AdvancedImageFileDialog(QDialog):
             self.update_file_list()
             
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法导航到目录: {str(e)}")
+            #return
+            print(f"导航错误: {e}")
+            print(f"错误类型: {type(e)}")
+            QMessageBox.critical(self, self.language_dict[self.current_language]['error'], 
+                               self.language_dict[self.current_language]['cannot_navigate'].format(str(e)))
     
     def selectedFiles(self):
         """返回选中的目录列表"""
@@ -618,6 +647,9 @@ class SpriteAlignerGUI(QMainWindow):
                     'cannot_load_image': '无法加载图片: {0}',
                     'confirm_batch_align': '确认批量对齐',
                     'confirm_batch_align_message': '确定要将 \'{0}\' 应用到所有 {1} 张图片吗？',
+                    'batch_align_success': '已将 \'{0}\' 应用到所有 {1} 张图片',
+                    'file_info_selected': '已选择 {0} 个目录，共 {1} 个文件',
+                    'stitch_preview': '拼接结果预览',
                     'please_select_align_type': '请先选择对齐类型',
                     'language': '语言:',
                     'yes': '是',
@@ -692,7 +724,23 @@ class SpriteAlignerGUI(QMainWindow):
                     'single_image_width': 'Single Image Width:',
                     'single_image_height': 'Single Image Height:',
                     'export_offset': 'Export Offset Settings',
-                    'import_offset': 'Import Offset Settings'
+                    'import_offset': 'Import Offset Settings',
+                    'error': 'Error',
+                    'select_directory': 'Select Directory',
+                    'save_stitch_result': 'Save Stitch Result',
+                    'stitch_result_saved': 'Stitch result saved to: {0}',
+                    'save_failed': 'Save failed: {0}',
+                    'stitch_failed': 'Stitch failed: {0}',
+                    'export_success': 'Offset settings exported to: {0}',
+                    'export_failed': 'Export failed: {0}',
+                    'import_success': 'Applied {0} offset settings',
+                    'import_failed': 'Import failed: {0}',
+                    'no_images_to_export': 'No image data to export',
+                    'please_import_images': 'Please import images first',
+                    'cannot_navigate_directory': 'Cannot navigate to directory: {0}',
+                    'batch_align_success': 'Applied \'{0}\' to all {1} images',
+                    'file_info_selected': 'Selected {0} directories, total {1} files',
+                    'stitch_preview': 'Stitch Result Preview'
                 }
             }
     
@@ -1512,7 +1560,7 @@ class SpriteAlignerGUI(QMainWindow):
                 # 如果没有图片了，重置状态
                 self.selected_index = -1
                 self.workspace_label.clear()
-                self.workspace_label.setText("请导入图片")
+                self.workspace_label.setText(self.language_dict[self.current_language]['no_image_selected'])
                 # 禁用相关按钮
                 self.set_ref_btn.setEnabled(False)
                 self.delete_btn.setEnabled(False)
@@ -1629,7 +1677,8 @@ class SpriteAlignerGUI(QMainWindow):
         # 加载图片
         pixmap = QPixmap(file_path)
         if pixmap.isNull():
-            QMessageBox.warning(self, "警告", f"无法加载图片: {file_path}")
+            QMessageBox.warning(self, self.language_dict[self.current_language]['warning'], 
+                               self.language_dict[self.current_language]['cannot_load_image'].format(file_path))
             return
         
         # 创建工作区画布
@@ -1983,7 +2032,8 @@ class SpriteAlignerGUI(QMainWindow):
             self.update_workspace()
             
             # 显示成功消息
-            QMessageBox.information(self, "成功", f"已将 '{align_type}' 应用到所有 {len(self.images_data)} 张图片")
+            QMessageBox.information(self, self.language_dict[self.current_language]['success'], 
+                                   self.language_dict[self.current_language]['batch_align_success'].format(align_type, len(self.images_data)))
     
     def calculate_align_offset(self, img_width, img_height, align_type):
         """计算对齐偏移量"""
@@ -2063,7 +2113,8 @@ class SpriteAlignerGUI(QMainWindow):
     def stitch_sprites(self):
         """将对齐后的精灵图重新拼接成完整的精灵图表"""
         if not self.images_data:
-            QMessageBox.warning(self, "警告", "请先导入图片")
+            QMessageBox.warning(self, self.language_dict[self.current_language]['warning'], 
+                               self.language_dict[self.current_language]['please_import_images'])
             return
         
         try:
@@ -2312,7 +2363,8 @@ class SpriteAlignerGUI(QMainWindow):
             return stitch_img
             
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"拼接失败：{str(e)}")
+            QMessageBox.critical(self, self.language_dict[self.current_language]['error'], 
+                               self.language_dict[self.current_language]['stitch_failed'].format(str(e)))
             return None
     
     def stitch_and_save_sprites(self):
@@ -2327,7 +2379,7 @@ class SpriteAlignerGUI(QMainWindow):
                 
                 # 打开文件保存对话框
                 file_path, _ = QFileDialog.getSaveFileName(
-                    self, "保存拼接结果", self.last_selected_path, "PNG Files (*.png);;All Files (*)"
+                    self, self.language_dict[self.current_language]['save_stitch_result'], self.last_selected_path, "PNG Files (*.png);;All Files (*)"
                 )
                 
                 if file_path:
@@ -2335,14 +2387,17 @@ class SpriteAlignerGUI(QMainWindow):
                     self.update_last_selected_path(file_path)
                     # 保存拼接结果
                     stitch_img.save(file_path, 'PNG')
-                    QMessageBox.information(self, "成功", f"拼接结果已保存到：{file_path}")
+                    QMessageBox.information(self, self.language_dict[self.current_language]['success'], 
+                                           self.language_dict[self.current_language]['stitch_result_saved'].format(file_path))
             except Exception as e:
-                QMessageBox.critical(self, "错误", f"保存失败：{str(e)}")
+                QMessageBox.critical(self, self.language_dict[self.current_language]['error'], 
+                                   self.language_dict[self.current_language]['save_failed'].format(str(e)))
     
     def export_offset_settings(self):
         """导出图片偏移设置到文件"""
         if not self.images_data:
-            QMessageBox.warning(self, "警告", "没有图片数据可以导出")
+            QMessageBox.warning(self, self.language_dict[self.current_language]['warning'], 
+                               self.language_dict[self.current_language]['no_images_to_export'])
             return
         
         try:
@@ -2359,7 +2414,7 @@ class SpriteAlignerGUI(QMainWindow):
             
             # 打开文件保存对话框
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "导出偏移设置", self.last_selected_path, "JSON Files (*.json);;All Files (*)"
+                self, self.language_dict[self.current_language]['export_offset'], self.last_selected_path, "JSON Files (*.json);;All Files (*)"
             )
             
             if file_path:
@@ -2369,20 +2424,23 @@ class SpriteAlignerGUI(QMainWindow):
                 with open(file_path, 'w', encoding='utf-8') as f:
                     json.dump(offset_data, f, ensure_ascii=False, indent=4)
                 
-                QMessageBox.information(self, "成功", f"偏移设置已导出到：{file_path}")
+                QMessageBox.information(self, self.language_dict[self.current_language]['success'], 
+                                       self.language_dict[self.current_language]['export_success'].format(file_path))
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"导出失败：{str(e)}")
+            QMessageBox.critical(self, self.language_dict[self.current_language]['error'], 
+                               self.language_dict[self.current_language]['export_failed'].format(str(e)))
     
     def import_offset_settings(self):
         """从文件导入图片偏移设置"""
         if not self.images_data:
-            QMessageBox.warning(self, "警告", "请先导入图片")
+            QMessageBox.warning(self, self.language_dict[self.current_language]['warning'], 
+                               self.language_dict[self.current_language]['please_import_images'])
             return
         
         try:
             # 打开文件选择对话框
             file_path, _ = QFileDialog.getOpenFileName(
-                self, "导入偏移设置", self.last_selected_path, "JSON Files (*.json);;All Files (*)"
+                self, self.language_dict[self.current_language]['import_offset'], self.last_selected_path, "JSON Files (*.json);;All Files (*)"
             )
             
             if file_path:
@@ -2413,9 +2471,11 @@ class SpriteAlignerGUI(QMainWindow):
                 # 更新工作区显示
                 self.update_workspace()
                 
-                QMessageBox.information(self, "成功", f"已应用 {applied_count} 个偏移设置")
+                QMessageBox.information(self, self.language_dict[self.current_language]['success'], 
+                                       self.language_dict[self.current_language]['import_success'].format(applied_count))
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"导入失败：{str(e)}")
+            QMessageBox.critical(self, self.language_dict[self.current_language]['error'], 
+                               self.language_dict[self.current_language]['import_failed'].format(str(e)))
     
     def toggle_stitch_mode(self):
         """切换拼接模式：按组拼接时禁用行列数设置，否则启用"""
@@ -2437,7 +2497,7 @@ class SpriteAlignerGUI(QMainWindow):
         
         # 创建预览窗口
         preview_window = QWidget()
-        preview_window.setWindowTitle("拼接结果预览")
+        preview_window.setWindowTitle(self.language_dict[self.current_language]['stitch_preview'])
         preview_window.resize(800, 600)
         
         layout = QVBoxLayout(preview_window)
